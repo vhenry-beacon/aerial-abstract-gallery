@@ -59,7 +59,6 @@
     renderItems();
     if (!rdraft) rdraft = reelFromReview();
     renderReel();
-    if (tab === "upload") loadUploads();
   }
   async function save(body, msg) {
     const r = await api(`/api/admin/review?slug=${encodeURIComponent(slug)}`, { method: "POST", body: JSON.stringify(body) });
@@ -70,20 +69,45 @@
     return true;
   }
   const unsaved = () => (curId && !same(draft, editOf(curId))) || (rdraft && !same(rdraft, reelFromReview()));
-  window.addEventListener("beforeunload", (e) => { if (unsaved() || uploading) { e.preventDefault(); e.returnValue = ""; } });
+  window.addEventListener("beforeunload", (e) => { if (unsaved()) { e.preventDefault(); e.returnValue = ""; } });
 
   // ---------- tabs ----------
   function setTab(t) {
-    tab = ["items", "reel", "upload"].includes(t) ? t : "items";
+    tab = ["items", "reel"].includes(t) ? t : "items";
     for (const b of document.querySelectorAll("#stTabs .tab")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
-    for (const k of ["items", "reel", "upload"]) $(`tab-${k}`).classList.toggle("hidden", k !== tab);
+    for (const k of ["items", "reel"]) $(`tab-${k}`).classList.toggle("hidden", k !== tab);
     if (tab !== "reel") stopReel();
-    if (tab === "upload" && D) loadUploads();
   }
   $("stTabs").addEventListener("click", (e) => { const b = e.target.closest(".tab"); if (b) setTab(b.dataset.tab); });
 
   // ---------- publish ----------
+  function ago(iso) {
+    const m = Math.round((Date.now() - new Date(iso)) / 60000);
+    return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`;
+  }
+  // Where Keri's requests stand: queued for the auto-editor, notes for Claude, updates to check.
+  function renderBanner() {
+    const items = D.items.filter((i) => !i.upsellOnly);
+    const queued = items.filter((i) => editWaiting(D.review.items[i.id])).length + (reelWaiting(D.review.reel) ? 1 : 0);
+    const notes = items.filter((i) => noteWaiting(D.review.items[i.id]) && rev(i.id).status !== "approved").length + (noteWaiting(D.review.reel) ? 1 : 0);
+    const updated = items.filter((i) => rev(i.id).status === "revised").length + (D.review.reel?.status === "revised" ? 1 : 0);
+    const w = D.worker, stale = !w || Date.now() - new Date(w.at) > 40 * 60000;
+    const parts = [];
+    if (queued) parts.push(`<b>⏳ ${queued} edit${queued === 1 ? "" : "s"} queued.</b> ${stale
+      ? `The auto-editor hasn't checked in ${w ? `since ${ago(w.at)}` : "yet"}: Vernon's Mac may be asleep or off.`
+      : "The auto-editor runs every 15 minutes while Vernon's Mac is on (slow motion takes a few minutes more)."}`);
+    if (notes) parts.push(`<b>💬 ${notes} note${notes === 1 ? "" : "s"} for Claude.</b> Written notes need Claude: tell Vernon, or ask Claude: “Keri left notes.”`);
+    if (updated) parts.push(`<b>✓ ${updated} updated</b>, ready for you to check. <button class="st-chip" data-f="revised" type="button">Show them</button>`);
+    if (w?.error && !stale) parts.push(`<span class="err">The auto-editor hit a problem: ${esc(w.error.slice(0, 160))}</span>`);
+    const proj = D.project ? `<a href="/admin/project/?id=${encodeURIComponent(D.project.id)}">${esc(D.project.name)} project page</a>` : "";
+    $("banner").innerHTML = parts.length || proj ? `<div class="st-banner">${parts.map((x) => `<div>${x}</div>`).join("")}
+      <div class="st-muted st-small">${w ? `Auto-editor last checked ${ago(w.at)}.` : ""} ${proj}</div></div>` : "";
+    if (D.project) $("homeLink").href = `/admin/project/?id=${encodeURIComponent(D.project.id)}`, $("homeLink").textContent = "← Project page";
+  }
+  $("banner").addEventListener("click", (e) => { const b = e.target.closest("[data-f]"); if (b) { filter = b.dataset.f; setTab("items"); renderItems(); } });
+
   function renderPublish() {
+    renderBanner();
     const items = D.items.filter((i) => !i.upsellOnly);
     const approved = items.filter((i) => rev(i.id).status === "approved").length;
     const pub = D.review.published;
@@ -105,6 +129,23 @@
 
   // ================= photos & clips =================
   const rev = (id) => D.review.items[id] || { status: "new", edit: null, notes: [], version: 0 };
+  // Mirrors lib/core.mjs: an edit saved but not rendered yet, or a note of Keri's that Claude hasn't answered.
+  const editWaiting = (r) => !!r && JSON.stringify(r.edit ?? null) !== JSON.stringify(r.rendered?.edit ?? null);
+  const REEL_KEYS = ["pieces", "look", "title", "subtitle", "endcard", "transition", "music"];
+  const reelWaiting = (reel) => !!reel && JSON.stringify(Object.fromEntries(REEL_KEYS.map((k) => [k, reel[k] ?? null])))
+    !== JSON.stringify(reel.rendered?.plan ? Object.fromEntries(REEL_KEYS.map((k) => [k, reel.rendered.plan[k] ?? null])) : null);
+  function noteWaiting(r) {
+    const last = (by) => (r?.notes || []).filter((n) => n.by === by).reduce((a, n) => (n.at > a ? n.at : a), "");
+    const keri = last("Keri");
+    return !!keri && keri > last("Claude");
+  }
+  // What the pill says: queued work wins over the review status.
+  function shown(r, waiting) {
+    if (waiting) return { cls: "waiting", text: "⏳ Edit queued" };
+    if (noteWaiting(r) && r.status !== "approved") return { cls: "note", text: "💬 Note for Claude" };
+    return { cls: r.status, text: STATUS[r.status] };
+  }
+  const pill = (r, waiting) => { const x = shown(r, waiting); return `<span class="pill ${x.cls}">${x.text}</span>`; };
   const item = (id) => D.items.find((i) => i.id === id);
   const thumbOf = (i) => (i.type === "video" ? i.poster : i.preview) || "";
   const blankEdit = (i) => ({ look: { preset: "original", brightness: 0, contrast: 0, saturation: 0, warmth: 0, fade: 0 }, ...(i.type === "video" ? { speed: 1, trim: null } : {}) });
@@ -117,16 +158,17 @@
     const items = D.items.filter((i) => !i.upsellOnly);
     const counts = { all: items.length };
     for (const s of Object.keys(STATUS)) counts[s] = items.filter((i) => rev(i.id).status === s).length;
-    const order = ["all", "new", "edits", "revised", "approved", "remove"];
+    counts.queued = items.filter((i) => editWaiting(rev(i.id))).length;
+    const order = ["all", "queued", "new", "edits", "revised", "approved", "remove"];
     $("filters").innerHTML = order.filter((k) => k === "all" || counts[k])
-      .map((k) => `<button class="st-chip ${filter === k ? "on" : ""}" data-f="${k}" type="button">${k === "all" ? "All" : STATUS[k]} · ${counts[k]}</button>`).join("");
-    const shown = items.filter((i) => filter === "all" || rev(i.id).status === filter);
-    $("grid").innerHTML = shown.map((i) => {
+      .map((k) => `<button class="st-chip ${filter === k ? "on" : ""}" data-f="${k}" type="button">${k === "all" ? "All" : k === "queued" ? "⏳ Edit queued" : STATUS[k]} · ${counts[k]}</button>`).join("");
+    const list = items.filter((i) => filter === "all" || (filter === "queued" ? editWaiting(rev(i.id)) : rev(i.id).status === filter));
+    $("grid").innerHTML = list.map((i) => {
       const r = rev(i.id);
-      const userNotes = r.notes.filter((n) => n.by !== "Claude").length;
+      const userNotes = r.notes.filter((n) => n.by === "Keri").length;
       return `<button class="st-thumb ${i.id === curId ? "on" : ""}" data-id="${esc(i.id)}" type="button">
         <img src="${esc(thumbOf(i))}" alt="" loading="lazy" style="filter:${Looks.cssFilter(r.edit?.look)}">
-        <span class="pill ${r.status}">${STATUS[r.status]}</span>
+        ${pill(r, editWaiting(r))}
         ${userNotes ? `<span class="notes">💬 ${userNotes}</span>` : ""}
         <span class="lbl">${esc(i.title)}${i.duration ? ` · ${secs(i.duration)}` : ""}</span></button>`;
     }).join("") || `<p class="empty">Nothing here.</p>`;
@@ -160,7 +202,7 @@
         <button class="st-compare" id="compare" type="button">Hold to see original</button>
       </div>
       <div class="st-ed-head">
-        <div><b>${esc(i.title)}</b> <span class="pill ${r.status}">${STATUS[r.status]}</span>${r.version ? ` <span class="st-muted st-small">v${r.version + 1}</span>` : ""}</div>
+        <div><b>${esc(i.title)}</b> ${pill(r, editWaiting(r))}${r.version ? ` <span class="st-muted st-small">v${r.version + 1}</span>` : ""}</div>
         <div><button class="btn ghost small" id="prevItem" type="button">‹ Prev</button> <button class="btn ghost small" id="nextItem" type="button">Next ›</button></div>
       </div>
       <div class="st-status-row">
@@ -248,9 +290,9 @@
   }
   function renderNotes() {
     const r = rev(curId);
-    $("notes").innerHTML = r.notes.map((n, k) => `<div class="st-note ${n.by === "Claude" ? "claude" : ""}">
+    $("notes").innerHTML = r.notes.map((n, k) => `<div class="st-note ${n.by !== "Keri" ? "claude" : ""}">
         <div class="who"><span>${esc(n.by)} · ${new Date(n.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
-          ${n.by !== "Claude" ? `<button class="del" data-delnote="${k}" type="button">Delete</button>` : ""}</div>
+          ${n.by === "Keri" ? `<button class="del" data-delnote="${k}" type="button">Delete</button>` : ""}</div>
         ${n.t !== null && n.t !== undefined ? `<button class="t" data-seek="${n.t}" type="button">${clock(n.t)}</button>` : ""}${esc(n.text)}</div>`).join("")
       || `<p class="st-muted st-small" style="margin:0">No notes yet.</p>`;
   }
@@ -291,7 +333,7 @@
   });
   function refreshStatusPill() {
     const r = rev(curId), p = $("editor").querySelector(".st-ed-head .pill");
-    if (p) { p.className = `pill ${r.status}`; p.textContent = STATUS[r.status]; }
+    if (p) { const x = shown(r, editWaiting(r)); p.className = `pill ${x.cls}`; p.textContent = x.text; }
     for (const b of $("editor").querySelectorAll("[data-status]")) b.classList.toggle("is-on", b.dataset.status === r.status);
   }
   $("editor").addEventListener("input", (e) => {
@@ -322,7 +364,7 @@
   function renderReel() {
     if (!D) return;
     const r = D.review.reel || { status: "new", notes: [] };
-    $("reelStatus").innerHTML = `<span class="pill ${r.status}">${STATUS[r.status]}</span>
+    $("reelStatus").innerHTML = `${pill(r, reelWaiting(D.review.reel))}
       <button class="btn approve small ${r.status === "approved" ? "is-on" : ""}" data-rstatus="approved" type="button">✓ Approve reel</button>
       <button class="btn edits small ${r.status === "edits" ? "is-on" : ""}" data-rstatus="edits" type="button">Needs edits</button>`;
     renderTimeline(); renderPiece(); renderReelForm(); renderReelNotes(); markReelDirty();
@@ -369,9 +411,9 @@
   }
   function renderReelNotes() {
     const notes = D.review.reel?.notes || [];
-    $("reelNotes").innerHTML = `<div class="st-notes">${notes.map((n, k) => `<div class="st-note ${n.by === "Claude" ? "claude" : ""}">
+    $("reelNotes").innerHTML = `<div class="st-notes">${notes.map((n, k) => `<div class="st-note ${n.by !== "Keri" ? "claude" : ""}">
         <div class="who"><span>${esc(n.by)} · ${new Date(n.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
-        ${n.by !== "Claude" ? `<button class="del" data-rdelnote="${k}" type="button">Delete</button>` : ""}</div>
+        ${n.by === "Keri" ? `<button class="del" data-rdelnote="${k}" type="button">Delete</button>` : ""}</div>
         ${n.t !== null && n.t !== undefined ? `<span class="t">${clock(n.t)}</span>` : ""}${esc(n.text)}</div>`).join("") || `<p class="st-muted st-small" style="margin:0">No notes yet.</p>`}</div>
       <textarea class="field" id="reelNoteText" placeholder="e.g. Open on the drone shot of the bounce houses, and end on the crowd"></textarea>
       <div class="st-note-row"><label class="st-small"><input type="checkbox" id="reelNoteAt"> at reel time <span id="reelNoteTime">0:00</span></label>
@@ -501,176 +543,6 @@
       }
     }
     seq.raf = requestAnimationFrame(tick);
-  }
-
-  // ================= uploads (raw files to R2) =================
-  let uploading = 0, project = null, queue = [], wakeLock = null;
-  const PART = 16 * 1024 * 1024;
-  const mb = (b) => (b >= 1e9 ? `${(b / 1e9).toFixed(2)} GB` : `${(b / 1e6).toFixed(1)} MB`);
-
-  async function loadUploads() {
-    const r = await api("/api/admin/raw/projects");
-    if (!r.ok) { $("upList").innerHTML = `<p class="err">${esc(r.body.error)}</p>`; return; }
-    if (!project) project = slug;
-    const names = [...new Set([...r.body.projects, project])].sort();
-    $("proj").innerHTML = names.map((n) => `<option value="${esc(n)}" ${n === project ? "selected" : ""}>${esc(n)}</option>`).join("");
-    listCloud();
-  }
-  $("proj").addEventListener("change", () => { project = $("proj").value; listCloud(); });
-  $("newProj").addEventListener("click", () => {
-    const n = (prompt("Name for the new project (for example: smith-wedding-2026):") || "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
-    if (!n) return;
-    project = n; $("proj").insertAdjacentHTML("beforeend", `<option value="${esc(n)}">${esc(n)}</option>`); $("proj").value = n; listCloud();
-  });
-  async function listCloud() {
-    const r = await api(`/api/admin/raw/list?project=${encodeURIComponent(project)}`);
-    if (!r.ok) { $("cloudFiles").innerHTML = ""; return; }
-    const files = r.body.files.sort((a, b) => a.path.localeCompare(b.path));
-    $("cloudSum").textContent = files.length ? `${files.length} file${files.length === 1 ? "" : "s"} · ${mb(files.reduce((a, f) => a + f.size, 0))}` : "";
-    $("cloudFiles").innerHTML = `<tr><th>File</th><th>Size</th><th>Added</th><th></th></tr>` + (files.map((f) =>
-      `<tr><td>${esc(f.path)}</td><td>${mb(f.size)}</td><td>${new Date(f.modified).toLocaleDateString()}</td>
-        <td><button class="btn ghost small" data-dl="${esc(f.path)}" type="button">Download</button></td></tr>`).join("")
-      || `<tr><td colspan="4" class="st-muted">Nothing uploaded to “${esc(project)}” yet.</td></tr>`);
-  }
-  $("cloudFiles").addEventListener("click", async (e) => {
-    const b = e.target.closest("[data-dl]"); if (!b) return;
-    const r = await api(`/api/admin/raw/url?project=${encodeURIComponent(project)}&path=${encodeURIComponent(b.dataset.dl)}`);
-    if (r.ok) location.href = r.body.url; else toast(r.body.error);
-  });
-
-  // Collect files from a drop, keeping folder structure (folder/sub/file.jpg).
-  async function entriesFromDrop(dt) {
-    const out = [];
-    const walk = (entry, path) => new Promise((resolve) => {
-      if (entry.isFile) entry.file((f) => { out.push({ file: f, path: path + f.name }); resolve(); }, () => resolve());
-      else if (entry.isDirectory) {
-        const reader = entry.createReader(), all = [];
-        const read = () => reader.readEntries(async (batch) => {
-          if (!batch.length) { for (const en of all) await walk(en, `${path}${entry.name}/`); resolve(); }
-          else { all.push(...batch); read(); }
-        }, () => resolve());
-        read();
-      } else resolve();
-    });
-    const roots = [...dt.items].map((i) => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
-    if (!roots.length) return [...dt.files].map((f) => ({ file: f, path: f.name }));
-    for (const r of roots) await walk(r, "");
-    return out;
-  }
-  const keep = (x) => !x.path.split("/").some((s) => s.startsWith(".")) && x.file.size > 0;
-  function enqueue(list) {
-    if (!project) return toast("Choose a project first");
-    const add = list.filter(keep).map((x) => ({ ...x, project, done: 0, state: "waiting", row: null }));
-    if (!add.length) return toast("No files found in what you dropped");
-    for (const x of add) {
-      x.row = document.createElement("div"); x.row.className = "st-up";
-      x.row.innerHTML = `<span class="name" title="${esc(x.path)}">${esc(x.path)}</span><div class="st-bar"><span></span></div><span class="st-muted st">waiting</span>`;
-      $("upList").appendChild(x.row);
-    }
-    queue.push(...add);
-    pump();
-  }
-  const drop = $("drop");
-  drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
-  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
-  drop.addEventListener("drop", async (e) => { e.preventDefault(); drop.classList.remove("over"); enqueue(await entriesFromDrop(e.dataTransfer)); });
-  $("pickFiles").addEventListener("change", (e) => { enqueue([...e.target.files].map((f) => ({ file: f, path: f.name }))); e.target.value = ""; });
-  $("pickFolder").addEventListener("change", (e) => { enqueue([...e.target.files].map((f) => ({ file: f, path: f.webkitRelativePath || f.name }))); e.target.value = ""; });
-
-  function show(x, state, pct) {
-    x.state = state;
-    x.row.classList.toggle("err", state.startsWith("failed"));
-    x.row.querySelector(".st").textContent = state;
-    if (pct !== undefined) x.row.querySelector(".st-bar span").style.width = `${pct}%`;
-    overall();
-  }
-  function overall() {
-    const total = queue.reduce((a, x) => a + x.file.size, 0), done = queue.reduce((a, x) => a + x.done, 0);
-    const left = queue.filter((x) => !["done", "already there"].includes(x.state) && !x.state.startsWith("failed")).length;
-    const failed = queue.filter((x) => x.state.startsWith("failed")).length;
-    $("upOverall").innerHTML = queue.length ? `<div class="st-overall">${left ? `Uploading to <b>${esc(queue[0].project)}</b>: ${queue.length - left} of ${queue.length} files` : `<b>All done.</b> ${queue.length - failed} of ${queue.length} files are in the cloud`}${failed ? ` · <span class="err">${failed} failed (drop them again to retry)</span>` : ""}
-      · ${mb(done)} of ${mb(total)}<div class="st-bar"><span style="width:${total ? (done / total) * 100 : 0}%"></span></div></div>` : "";
-  }
-
-  async function pump() {
-    if (!uploading) { try { wakeLock = await navigator.wakeLock?.request("screen"); } catch {} }
-    while (uploading < 3) {
-      const x = queue.find((q) => q.state === "waiting"); if (!x) break;
-      uploading++; x.state = "starting";
-      uploadOne(x).catch((err) => show(x, `failed: ${err.message || err}`)).finally(() => {
-        uploading--;
-        if (!uploading && !queue.some((q) => q.state === "waiting")) { try { wakeLock?.release(); } catch {} listCloud(); }
-        pump();
-      });
-    }
-  }
-  function put(url, blob, onProgress) {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("PUT", url);
-      xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded);
-      xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve(xhr.getResponseHeader("ETag")) : reject(new Error(`upload error ${xhr.status}`)));
-      xhr.onerror = () => reject(new Error("network error"));
-      xhr.send(blob);
-    });
-  }
-  async function retry(fn, tries = 4) {
-    for (let k = 1; ; k++) {
-      try { return await fn(); } catch (e) { if (k >= tries) throw e; await new Promise((r) => setTimeout(r, 1500 * k)); }
-    }
-  }
-  const rawApi = (route, body) => api(`/api/admin/raw/${route}`, { method: "POST", body: JSON.stringify({ project: body.project, ...body }) });
-
-  async function uploadOne(x) {
-    const f = x.file, resumeKey = `raw-up:${x.project}/${x.path}:${f.size}:${f.lastModified}`;
-    let saved = null; try { saved = JSON.parse(localStorage.getItem(resumeKey) || "null"); } catch {}
-    let uploadId = saved?.uploadId, have = {};
-    if (uploadId) {
-      const r = await rawApi("parts", { project: x.project, path: x.path, uploadId });
-      if (r.ok) for (const p of r.body.parts) have[p.n] = p; else uploadId = null;
-    }
-    if (!uploadId) {
-      const s = await rawApi("start", { project: x.project, path: x.path, size: f.size, type: f.type });
-      if (!s.ok) throw new Error(s.body.error || "couldn't start");
-      if (s.body.done) { x.done = f.size; return show(x, "already there", 100); }
-      if (s.body.url) {
-        show(x, "uploading", 0);
-        await retry(() => put(s.body.url, f, (n) => { x.done = n; show(x, "uploading", Math.round((n / f.size) * 100)); }));
-        x.done = f.size; return show(x, "done", 100);
-      }
-      uploadId = s.body.uploadId;
-      try { localStorage.setItem(resumeKey, JSON.stringify({ uploadId })); } catch {}
-    }
-    // multipart: parts of PART bytes (bigger for very large files, max 10,000 parts)
-    const size = Math.max(PART, Math.ceil(f.size / 9500 / 1048576) * 1048576);
-    const count = Math.ceil(f.size / size);
-    const progress = {};
-    for (const n in have) progress[n] = have[n].size;
-    const report = () => { x.done = Object.values(progress).reduce((a, b) => a + b, 0); show(x, "uploading", Math.round((x.done / f.size) * 100)); };
-    report();
-    const todo = []; for (let n = 1; n <= count; n++) if (!have[n]) todo.push(n);
-    for (let b = 0; b < todo.length; b += 20) {
-      const batch = todo.slice(b, b + 20);
-      const u = await rawApi("part-urls", { project: x.project, path: x.path, uploadId, parts: batch });
-      if (!u.ok) throw new Error(u.body.error || "couldn't get upload links");
-      let next = 0;
-      const worker = async () => {
-        while (next < batch.length) {
-          const n = batch[next++];
-          const blob = f.slice((n - 1) * size, Math.min(f.size, n * size));
-          const etag = await retry(() => put(u.body.urls[n], blob, (loaded) => { progress[n] = loaded; report(); }));
-          if (!etag) throw new Error("storage didn't return a part receipt (CORS ExposeHeaders ETag)");
-          have[n] = { n, etag, size: blob.size }; progress[n] = blob.size; report();
-        }
-      };
-      await Promise.all([worker(), worker(), worker(), worker()]);
-    }
-    show(x, "finishing", 100);
-    const c = await rawApi("complete", { project: x.project, path: x.path, uploadId, parts: Object.values(have).map((p) => ({ n: p.n, etag: p.etag })) });
-    if (!c.ok) throw new Error(c.body.error || "couldn't finish");
-    if (c.body.size !== f.size) throw new Error(`size mismatch in the cloud (${c.body.size} vs ${f.size})`);
-    try { localStorage.removeItem(resumeKey); } catch {}
-    x.done = f.size; show(x, "done", 100);
   }
 
   boot();

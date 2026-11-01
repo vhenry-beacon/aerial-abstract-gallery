@@ -2,11 +2,12 @@
 """Apply Keri's review-studio requests (admin/studio) to the real files.
 
   studio.py status --slug river-oaks                 # what Keri asked for, item by item
-  studio.py render --slug river-oaks                 # render every changed edit request
+  studio.py render --slug river-oaks                 # render every changed request (items + reel)
   studio.py render --slug river-oaks --ids clip-03   # just these items
   studio.py render --slug river-oaks --reel [--music track.mp3]
   studio.py set   --slug river-oaks --id clip-03 [--trim 0.8:3.0] [--speed 0.5] [--look warm]
   studio.py reply --slug river-oaks --id clip-03 --text "Trimmed the first second"   (--id reel for the reel)
+  studio.py auto                                     # background job: every gallery, render + publish
 
 Edits always start from the untouched original, kept in R2 at orig/<slug>/<id> (copied from
 full/<slug>/<id> the first time an item is edited). Results:
@@ -51,8 +52,9 @@ def log(*a):
 
 # ---------------- site API (admin) ----------------
 class Site:
-    def __init__(self, slug):
+    def __init__(self, slug, by="Claude"):
         self.slug = slug
+        self.by = by  # "Auto-editor" when run by the background job: its notes don't count as answering Keri
         self.cookie = ""  # kept by hand: the admin cookie is Secure, which a cookie jar won't send to http://localhost
         self.call("POST", "/api/admin/login", {"password": env("ADMIN_PASSWORD")}, slug=False)
 
@@ -72,7 +74,7 @@ class Site:
         return self.call("GET", "/api/admin/review")
 
     def post(self, body):
-        return self.call("POST", "/api/admin/review", {"by": "Claude", **body})["review"]
+        return self.call("POST", "/api/admin/review", {"by": self.by, **body})["review"]
 
 
 # ---------------- Cloudflare R2 (S3 SigV4, unsigned payload) ----------------
@@ -81,8 +83,9 @@ class R2:
         self.acct, self.kid, self.sec, self.bucket = (env(k) for k in ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET"))
         self.host = f"{self.acct}.r2.cloudflarestorage.com"
 
-    def _req(self, method, key, headers=None, body=None, length=None):
-        path = "/" + self.bucket + "/" + urllib.parse.quote(key, safe="/~")
+    def _req(self, method, key, headers=None, body=None, length=None, query=None):
+        path = "/" + self.bucket + ("/" + urllib.parse.quote(key, safe="/~") if key else "")
+        q = "&".join(f"{urllib.parse.quote(k, safe='~')}={urllib.parse.quote(str(v), safe='~')}" for k, v in sorted((query or {}).items()))
         now = datetime.datetime.now(datetime.timezone.utc)
         amz, day = now.strftime("%Y%m%dT%H%M%SZ"), now.strftime("%Y%m%d")
         h = {**(headers or {}), "host": self.host, "x-amz-date": amz, "x-amz-content-sha256": "UNSIGNED-PAYLOAD"}
@@ -90,7 +93,7 @@ class R2:
             h["content-length"] = str(length)
         names = sorted(k.lower() for k in h)
         lower = {k.lower(): str(v).strip() for k, v in h.items()}
-        canonical = "\n".join([method, path, "", "".join(f"{k}:{lower[k]}\n" for k in names), ";".join(names), "UNSIGNED-PAYLOAD"])
+        canonical = "\n".join([method, path, q, "".join(f"{k}:{lower[k]}\n" for k in names), ";".join(names), "UNSIGNED-PAYLOAD"])
         scope = f"{day}/auto/s3/aws4_request"
         sts = "\n".join(["AWS4-HMAC-SHA256", amz, scope, hashlib.sha256(canonical.encode()).hexdigest()])
         k = ("AWS4" + self.sec).encode()
@@ -99,8 +102,26 @@ class R2:
         sig = hmac.new(k, sts.encode(), hashlib.sha256).hexdigest()
         h["Authorization"] = f"AWS4-HMAC-SHA256 Credential={self.kid}/{scope}, SignedHeaders={';'.join(names)}, Signature={sig}"
         conn = http.client.HTTPSConnection(self.host, timeout=300)
-        conn.request(method, path, body=body, headers=h)
+        conn.request(method, path + (f"?{q}" if q else ""), body=body, headers=h)
         return conn, conn.getresponse()
+
+    def list(self, prefix):
+        """[{key, size}] under a prefix (ListObjectsV2, all pages)."""
+        import re
+        out, token = [], None
+        while True:
+            q = {"list-type": "2", "prefix": prefix, **({"continuation-token": token} if token else {})}
+            conn, r = self._req("GET", "", query=q)
+            xml = r.read().decode(); conn.close()
+            if r.status != 200:
+                sys.exit(f"listing {prefix} failed: {r.status} {xml[:200]}")
+            for m in re.finditer(r"<Contents>(.*?)</Contents>", xml, re.S):
+                out.append({"key": re.search(r"<Key>(.*?)</Key>", m.group(1)).group(1).replace("&amp;", "&"),
+                            "size": int(re.search(r"<Size>(\d+)</Size>", m.group(1)).group(1))})
+            t = re.search(r"<NextContinuationToken>(.*?)</NextContinuationToken>", xml)
+            if "<IsTruncated>true</IsTruncated>" not in xml or not t:
+                return out
+            token = t.group(1)
 
     def head(self, key):
         conn, r = self._req("HEAD", key)
@@ -424,6 +445,16 @@ def pending(data):
     return out
 
 
+REEL_KEYS = ("pieces", "look", "title", "subtitle", "endcard", "transition", "music")
+
+
+def reel_changed(reel):
+    """The saved reel plan differs from the last rendered one (compared after the server's clean-up)."""
+    if not reel:
+        return False
+    return json.dumps((reel.get("rendered") or {}).get("plan"), sort_keys=True) != json.dumps({k: reel.get(k) for k in REEL_KEYS}, sort_keys=True)
+
+
 def cmd_status(site):
     data = site.review()
     rv = data["review"]
@@ -445,8 +476,7 @@ def cmd_status(site):
         print(f"\nNot reviewed yet: {', '.join(untouched)}")
     reel = rv.get("reel")
     if reel:
-        changed = json.dumps((reel.get("rendered") or {}).get("plan"), sort_keys=True) != json.dumps(
-            {k: reel.get(k) for k in ("pieces", "look", "title", "subtitle", "endcard", "transition", "music")}, sort_keys=True)
+        changed = reel_changed(reel)
         print(f"\nREEL: {reel['status']}{' [plan changed, render it]' if changed else ''} — {len(reel['pieces'])} pieces, "
               f"title {reel.get('title')!r}, music {reel.get('music') or 'none'!r}")
         for k, p in enumerate(reel["pieces"]):
@@ -456,11 +486,57 @@ def cmd_status(site):
             print(f"   {n['by']}: {t}{n['text']}")
 
 
+def cmd_auto():
+    """Background job (tools/autorender.sh, every 15 min): render every gallery's waiting requests, publish, report."""
+    import fcntl, socket
+    lock = open(os.path.join(tempfile.gettempdir(), "aerial-abstract-autorender.lock"), "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return log("Another auto-render is still running; skipping this round.")
+    slugs = sorted(d for d in os.listdir(os.path.join(ROOT, "clients")) if os.path.exists(os.path.join(ROOT, "clients", d, "client.json")))
+    rendered, error, site = [], "", None
+    try:
+        for slug in slugs:
+            site = Site(slug, by="Auto-editor")
+            data = site.review()
+            ids, do_reel = pending(data), reel_changed(data["review"].get("reel"))
+            if not ids and not do_reel:
+                continue
+            log(f"{slug}: {len(ids)} item(s){' + reel' if do_reel else ''}")
+            with tempfile.TemporaryDirectory() as td:
+                cache = {"_dir": td}
+                r2 = R2()
+                if ids:
+                    render_items(site, r2, data, ids, cache)
+                if do_reel:
+                    render_reel(site, r2, site.review(), cache)
+            rendered += [f"{slug}/{i}" for i in ids] + ([f"{slug}/reel"] if do_reel else [])
+        if rendered:
+            for cmd in (["npm", "run", "build"], ["netlify", "deploy", "--prod", "--build"]):
+                p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+                if p.returncode:
+                    raise RuntimeError(f"{' '.join(cmd)} failed: {(p.stderr or p.stdout)[-300:]}")
+            # local save point only; pushing to GitHub happens in a normal Claude session
+            subprocess.run(["git", "add", "clients", "public/media", "lib/registry.generated.mjs"], cwd=ROOT)
+            subprocess.run(["git", "commit", "-q", "-m", "Auto-editor: " + ", ".join(rendered)[:200]], cwd=ROOT)
+            log(f"published: {', '.join(rendered)}")
+    except (SystemExit, Exception) as e:  # studio.py helpers exit on errors; report them instead of dying silently
+        error = str(e) or repr(e)
+        log(f"error: {error}")
+    finally:
+        try:
+            (site or Site(slugs[0], by="Auto-editor")).call("POST", "/api/admin/worker",
+                {"rendered": rendered, "error": error, "host": socket.gethostname()}, slug=False)
+        except BaseException as e:
+            log(f"couldn't report to the site: {e}")
+
+
 def main():
     global SITE
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["status", "render", "set", "reply"])
-    ap.add_argument("--slug", required=True)
+    ap.add_argument("cmd", choices=["status", "render", "set", "reply", "auto"])
+    ap.add_argument("--slug")
     ap.add_argument("--site", default=SITE)
     ap.add_argument("--ids", default="")
     ap.add_argument("--id", default="")
@@ -472,6 +548,10 @@ def main():
     ap.add_argument("--text")
     a = ap.parse_args()
     SITE = a.site
+    if a.cmd == "auto":
+        return cmd_auto()
+    if not a.slug:
+        ap.error("--slug is required")
     site = Site(a.slug)
     if a.cmd == "status":
         return cmd_status(site)
@@ -492,15 +572,17 @@ def main():
         site.post({"id": a.id, "edit": edit})
         return log(f"{a.id}: edit set to {edit}")
     # render
-    ids = [x for x in a.ids.split(",") if x] or ([] if a.reel else pending(data))
-    if not ids and not a.reel:
+    # default: every changed item request, plus the reel if its plan changed. --ids limits it to those items.
+    ids = [x for x in a.ids.split(",") if x] or pending(data)
+    do_reel = a.reel or (not a.ids and reel_changed(data["review"].get("reel")))
+    if not ids and not do_reel:
         return log("Nothing to render: no edit requests have changed.")
     with tempfile.TemporaryDirectory() as td:
         cache = {"_dir": td}
         r2 = R2()
         if ids:
             render_items(site, r2, data, ids, cache)
-        if a.reel:
+        if do_reel:
             render_reel(site, r2, site.review(), cache, a.music)
     log("Next: npm run build, deploy, and commit the changed previews/manifest.")
 

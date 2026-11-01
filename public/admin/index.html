@@ -4,36 +4,21 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>Gallery Admin · Aerial Abstract</title>
+  <title>Projects · Aerial Abstract</title>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Instrument+Serif&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/style.css">
-  <style>
-    table.t { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--surface); border-radius: 12px; overflow: hidden; }
-    .t th, .t td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-    .t th { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); }
-    .t img { width: 64px; height: 40px; object-fit: cover; border-radius: 6px; display: block; }
-    .pill { font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--line); }
-    .pill.ok { background: var(--accent); color: var(--accent-ink); }
-    .pill.warn { background: var(--gold-soft); color: var(--ink); }
-    .drop { border: 2px dashed var(--line); border-radius: 14px; padding: 26px; text-align: center; color: var(--ink-2); margin: 14px 0; background: var(--surface); }
-    .drop.over { border-color: var(--accent); }
-    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 16px 0; }
-    .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
-    .kpi b { display: block; font-size: 22px; }
-    .kpi span { font-size: 13px; color: var(--ink-3); }
-    h2 { font-family: var(--serif); font-weight: 400; font-size: 30px; margin: 26px 0 8px; }
-    .log { font-family: ui-monospace, monospace; font-size: 12px; color: var(--ink-2); max-height: 160px; overflow: auto; white-space: pre-wrap; }
-    .scroll { overflow-x: auto; }
-    .small { font-size: 12px; padding: 6px 10px; }
-  </style>
+  <link rel="stylesheet" href="/assets/studio.css">
 </head>
 <body>
   <div class="wrap">
-    <header class="top"><div class="brand">Aerial Abstract · Gallery admin</div><div class="contact" id="mode"></div></header>
+    <header class="top">
+      <div class="brand">Aerial Abstract · Projects</div>
+      <div class="contact"><a href="/admin/orders/">Orders &amp; payments</a></div>
+    </header>
 
     <section id="login" class="login hidden">
       <form id="loginForm">
-        <h1>Admin</h1>
+        <h1>Projects</h1>
         <input class="field" id="pw" type="password" placeholder="Admin password" autocomplete="current-password" required>
         <div class="err" id="loginErr"></div>
         <button class="btn" style="width:100%">Sign in</button>
@@ -41,35 +26,24 @@
     </section>
 
     <section id="app" class="hidden">
-      <label>Client gallery&nbsp;
-        <select id="client" class="field" style="width:auto;display:inline-block"></select>
-      </label>
-      <a id="openGallery" target="_blank" style="margin-left:10px">Open client view ↗</a>
-      <a id="openStudio" class="btn small" style="margin-left:10px;text-decoration:none" href="/admin/studio/">Review studio: approve, edit, upload →</a>
-
-      <div class="cards" id="kpis"></div>
-
-      <h2>Upload full-quality files</h2>
-      <p style="color:var(--ink-2);margin:0">Drop the files from the <b>full</b> folder here (for example, <code>clip-01.mp4</code> and <code>photo-01.jpg</code>). Each file is matched by name to its gallery item and stored privately. Clients can download a file only after they've picked or paid for it.</p>
-      <div class="drop" id="drop">Drop files here or <label style="color:var(--accent);cursor:pointer;text-decoration:underline">browse<input type="file" id="file" multiple hidden></label></div>
-      <div class="log" id="log"></div>
-
-      <h2>Items</h2>
-      <div class="scroll"><table class="t" id="items"></table></div>
-
-      <h2>Orders</h2>
-      <div class="scroll"><table class="t" id="orders"></table></div>
-
-      <h2>Manual actions</h2>
-      <p style="color:var(--ink-2)">Use these if the client paid outside the site (PayPal, check, Zelle).</p>
-      <div class="row" style="flex-wrap:wrap;max-width:760px">
-        <button class="btn ghost" data-action="mark-cart-paid" type="button">Mark the client's current cart as paid</button>
-        <button class="btn ghost" data-action="mark-package-paid" type="button">Mark package as paid (no picks yet)</button>
-        <button class="btn ghost" data-action="mark-package-unpaid" type="button">Undo: package unpaid</button>
+      <div class="pj-head">
+        <h1 class="pj-title">Projects</h1>
+        <span class="st-muted st-small" id="worker"></span>
       </div>
-      <div style="height:60px"></div>
+      <div class="pj-tiles" id="tiles"></div>
+
+      <dialog id="newDlg" class="pj-dlg">
+        <form id="newForm" method="dialog">
+          <h2>New project</h2>
+          <label>Project name<input class="field" id="nName" required placeholder="e.g. Smith wedding, June 2027"></label>
+          <label>Client<input class="field" id="nClient" placeholder="Client or organization name"></label>
+          <label>Event date<input class="field" id="nDate" type="date"></label>
+          <div class="err" id="newErr"></div>
+          <div class="row"><button class="btn ghost" value="cancel" type="button" id="newCancel">Cancel</button><button class="btn" id="newGo" type="submit">Create project</button></div>
+        </form>
+      </dialog>
     </section>
   </div>
-  <script src="/assets/admin.js"></script>
+  <script src="/assets/projects.js"></script>
 </body>
 </html>

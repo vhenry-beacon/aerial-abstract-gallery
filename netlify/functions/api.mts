@@ -6,6 +6,7 @@ import {
   r2, r2Key, r2Presign, r2Head, storageMode,
   r2List, r2MultipartStart, r2PartUrl, r2MultipartParts, r2MultipartComplete, r2MultipartAbort,
   getReview, saveReview, clientCanSee, REVIEW_STATUSES,
+  editWaiting, reelWaiting, noteWaiting, getProject, saveProject, listProjects, PROJECT_STATUSES, getWorker, setWorker,
 } from "../../lib/core.mjs";
 
 const bad = (msg: string, status = 400) => json({ error: msg }, { status });
@@ -94,8 +95,53 @@ function cleanReel(r: any, client: any) {
   };
 }
 
+// ---- projects: Keri's quote + instructions + raw files, which Claude turns into a gallery ----
+const str = (v: any, n = 200) => String(v ?? "").trim().slice(0, n);
+const cents = (v: any) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.round(Number(v)) : 0);
+function cleanProject(b: any, prev: any = {}) {
+  const q = b.quote || {};
+  return {
+    ...prev,
+    name: str(b.name ?? prev.name, 120) || prev.name,
+    client: { name: str(b.client?.name, 120), email: str(b.client?.email, 160), phone: str(b.client?.phone, 40) },
+    event: { name: str(b.event?.name, 120), date: str(b.event?.date, 10), location: str(b.event?.location, 160) },
+    quote: {
+      packageName: str(q.packageName, 80), price: cents(q.price), included: Math.min(500, cents(q.included)),
+      extraPrice: cents(q.extraPrice), due: str(q.due, 10), description: str(q.description, 8000),
+      addons: (Array.isArray(q.addons) ? q.addons : []).slice(0, 10)
+        .map((a: any) => ({ name: str(a.name, 80), price: cents(a.price), description: str(a.description, 400) }))
+        .filter((a: any) => a.name),
+    },
+    instructions: str(b.instructions, 8000),
+  };
+}
+async function projectSummary(p: any, rawFolders: Set<string>) {
+  let status = "quote", cover = null, counts = null;
+  const client = p.gallerySlug ? getClient(p.gallerySlug) : null;
+  if (client) {
+    const [review, state, orders] = await Promise.all([getReview(client.slug), getState(client), listOrders(client.slug)]);
+    status = state.packagePaid || orders.some((o: any) => o.status === "paid") ? "paid" : review.published ? "published" : "reviewing";
+    const photo = client.items.find((i: any) => i.type === "photo") || client.items.find((i: any) => i.poster);
+    cover = photo ? photo.preview || photo.poster : null;
+    const items = client.items.filter((i: any) => !i.upsellOnly);
+    counts = {
+      items: items.length,
+      approved: items.filter((i: any) => review.items[i.id]?.status === "approved").length,
+      waiting: items.filter((i: any) => editWaiting(review.items[i.id])).length + (reelWaiting(review.reel) ? 1 : 0),
+      notes: items.filter((i: any) => noteWaiting(review.items[i.id])).length + (noteWaiting(review.reel) ? 1 : 0),
+    };
+  } else if (p.sentToClaudeAt) status = "claude";
+  else if (rawFolders.has(p.id)) status = "files";
+  return { ...p, accessCode: undefined, status, statusLabel: PROJECT_STATUSES[status as keyof typeof PROJECT_STATUSES], cover, counts, hasFiles: rawFolders.has(p.id) };
+}
+async function rawProjectFolders() {
+  if (!r2()) return new Set<string>();
+  const { folders } = await r2List("raw/", "/");
+  return new Set(folders.map((f: string) => f.slice(4).replace(/\/$/, "")));
+}
+
 // Raw-upload projects are folders under raw/ in R2 (a gallery slug or any other short name).
-const projectName = (p: any) => String(p || "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+const projectName = (p: any) => String(p || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
 const safePath = (p: any) => String(p || "").replace(/\\/g, "/").split("/").filter((s) => s && s !== "." && s !== ".." && !s.startsWith("._")).join("/").slice(0, 400);
 
 async function readJson(req: Request) {
@@ -301,6 +347,48 @@ export default async (req: Request, context: Context) => {
         return bad("Not found", 404);
       }
 
+      // ---- projects ----
+      if (route === "admin/projects" && m === "GET") {
+        const raw = await rawProjectFolders();
+        const projects = await Promise.all((await listProjects()).map((p: any) => projectSummary(p, raw)));
+        return json({ projects, worker: await getWorker() });
+      }
+      if (route === "admin/project" && m === "GET") {
+        const p = await getProject(projectName(url.searchParams.get("id")));
+        if (!p) return bad("Project not found", 404);
+        const summary = await projectSummary(p, await rawProjectFolders());
+        return json({ project: { ...summary, accessCode: p.accessCode || null }, worker: await getWorker() });
+      }
+      if (route === "admin/project" && m === "POST") {
+        const b: any = await readJson(req);
+        const at = new Date().toISOString();
+        let p: any;
+        if (b.id) {
+          p = await getProject(projectName(b.id));
+          if (!p) return bad("Project not found", 404);
+          if (b.send) { p.sentToClaudeAt = at; p.sentNote = str(b.sentNote, 2000); }
+          else if (b.claude) {
+            // tools/project.py: link the finished gallery and record its access code for Keri
+            if (b.gallerySlug) { if (!getClient(b.gallerySlug)) return bad("That gallery isn't deployed yet"); p.gallerySlug = b.gallerySlug; }
+            if (b.accessCode) p.accessCode = str(b.accessCode, 40);
+            if (b.claudeNote) (p.claudeNotes ||= []).push({ text: str(b.claudeNote, 2000), at });
+          } else p = cleanProject(b, p);
+        } else {
+          const name = str(b.name, 120);
+          if (!name) return bad("Give the project a name");
+          let id = projectName(name) || "project", n = 2;
+          while ((await getProject(id)) || (getClient(id) && b.gallerySlug !== id)) id = `${projectName(name)}-${n++}`;
+          p = { ...cleanProject(b), id, createdAt: at, gallerySlug: b.gallerySlug && getClient(b.gallerySlug) ? b.gallerySlug : null };
+        }
+        await saveProject(p);
+        return json({ project: { ...(await projectSummary(p, await rawProjectFolders())), accessCode: p.accessCode || null } });
+      }
+      if (route === "admin/worker" && m === "POST") {
+        const b: any = await readJson(req);
+        await setWorker({ rendered: (b.rendered || []).slice(0, 50).map((x: any) => str(x, 60)), error: str(b.error, 500), host: str(b.host, 60) });
+        return json({ ok: true });
+      }
+
       const slug = url.searchParams.get("slug") || "";
       const client = getClient(slug);
       if (!client) return bad("Unknown client", 404);
@@ -314,8 +402,13 @@ export default async (req: Request, context: Context) => {
       // ---- review studio ----
       if (route === "admin/review" && m === "GET") {
         const metas = await fileMetas(slug);
+        const review = await getReview(slug);
+        const flags: Record<string, any> = {};
+        for (const i of client.items) flags[i.id] = { waiting: editWaiting(review.items[i.id]), note: noteWaiting(review.items[i.id]) };
+        flags.reel = { waiting: reelWaiting(review.reel), note: noteWaiting(review.reel) };
+        const project = (await listProjects()).find((p: any) => p.gallerySlug === slug);
         return json({
-          client: publicClient(client), review: await getReview(slug),
+          client: publicClient(client), review, flags, worker: await getWorker(), project: project ? { id: project.id, name: project.name } : null,
           items: client.items.map((i: any) => ({ ...i, ready: !!metas[i.id] })),
         });
       }
@@ -323,7 +416,8 @@ export default async (req: Request, context: Context) => {
         const b: any = await readJson(req);
         const review = await getReview(slug);
         const at = new Date().toISOString();
-        const by = b.by === "Claude" ? "Claude" : "Keri";
+        const by = ["Claude", "Auto-editor"].includes(b.by) ? b.by : "Keri";
+        const tool = by !== "Keri";
         const note = (n: any) => n && String(n.text || "").trim()
           ? { t: Number.isFinite(Number(n.t)) && n.t !== null ? Math.max(0, Number(n.t)) : null, text: String(n.text).trim().slice(0, 2000), by, at }
           : null;
@@ -345,7 +439,7 @@ export default async (req: Request, context: Context) => {
           if (Number.isInteger(b.deleteNote)) r.notes.splice(b.deleteNote, 1);
           if (Number.isInteger(b.version)) r.version = b.version;
           // tools/studio.py records which edit the delivered file now reflects
-          if (by === "Claude" && b.rendered !== undefined) r.rendered = b.rendered === null ? null : { edit: cleanEdit(b.rendered, item), at };
+          if (tool && b.rendered !== undefined) r.rendered = b.rendered === null ? null : { edit: cleanEdit(b.rendered, item), at };
           r.updatedAt = at;
         }
         if (b.reel !== undefined || b.reelNote || b.reelStatus || b.reelRendered !== undefined) {
@@ -356,7 +450,7 @@ export default async (req: Request, context: Context) => {
           if (b.reelStatus && REVIEW_STATUSES.includes(b.reelStatus)) reel.status = b.reelStatus;
           if (Number.isInteger(b.reelDeleteNote)) reel.notes.splice(b.reelDeleteNote, 1);
           if (Number.isInteger(b.reelVersion)) reel.version = b.reelVersion;
-          if (by === "Claude" && b.reelRendered !== undefined) reel.rendered = b.reelRendered === null ? null : { plan: cleanReel(b.reelRendered, client), at };
+          if (tool && b.reelRendered !== undefined) reel.rendered = b.reelRendered === null ? null : { plan: cleanReel(b.reelRendered, client), at };
           reel.updatedAt = at;
         }
         await saveReview(slug, review);

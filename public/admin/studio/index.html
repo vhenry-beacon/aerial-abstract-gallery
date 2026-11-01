@@ -13,7 +13,7 @@
   <div class="wrap">
     <header class="top">
       <div class="brand">Aerial Abstract · Review studio</div>
-      <div class="contact"><a href="/admin/">Gallery admin</a></div>
+      <div class="contact"><a href="/admin/" id="homeLink">← All projects</a></div>
     </header>
 
     <section id="login" class="login hidden">
@@ -35,10 +35,10 @@
         </div>
       </div>
 
+      <div id="banner"></div>
       <nav class="tabs" role="tablist" id="stTabs">
         <button class="tab" data-tab="items" aria-selected="true" type="button">Photos &amp; clips</button>
         <button class="tab" data-tab="reel" aria-selected="false" type="button">Highlight reel</button>
-        <button class="tab" data-tab="upload" aria-selected="false" type="button">Upload files</button>
       </nav>
 
       <!-- ============ photos & clips ============ -->
@@ -87,25 +87,6 @@
         </div>
       </div>
 
-      <!-- ============ uploads ============ -->
-      <div id="tab-upload" class="hidden">
-        <p class="st-muted">Drop a whole shoot here: raw photos, raw video, edited exports, anything. Files go straight to the cloud (Cloudflare R2), so nothing needs to stay on your computer once they show up below. Keep this page open until the uploads finish. If one gets interrupted, drop the same files again and it picks up where it left off.</p>
-        <div class="st-proj">
-          <label>Project&nbsp;<select id="proj" class="field st-select"></select></label>
-          <button class="btn ghost small" id="newProj" type="button">+ New project</button>
-        </div>
-        <div class="drop st-drop" id="drop">
-          <b>Drop files or whole folders here</b><br>
-          <span class="st-muted">or</span>
-          <label class="st-linkbtn">choose files<input type="file" id="pickFiles" multiple hidden></label>
-          <span class="st-muted">·</span>
-          <label class="st-linkbtn">choose a folder<input type="file" id="pickFolder" webkitdirectory multiple hidden></label>
-        </div>
-        <div id="upOverall"></div>
-        <div id="upList" class="st-uplist"></div>
-        <h3>In the cloud <span class="st-muted st-small" id="cloudSum"></span></h3>
-        <div class="scroll"><table class="t" id="cloudFiles"></table></div>
-      </div>
       <div style="height:60px"></div>
     </section>
   </div>
