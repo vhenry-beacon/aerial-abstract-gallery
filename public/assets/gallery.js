@@ -6,6 +6,7 @@
   let tab = "all";
   let lbList = [];
   let lbIndex = 0;
+  let lbReel = null; // the add-on reel when the lightbox is showing it
 
   function toast(msg, ms = 4200) {
     const t = document.createElement("div");
@@ -202,18 +203,24 @@
     const inCart = data.state.cartUpsells.includes(u.id);
     slot.innerHTML = `
       <div class="upsell">
-        <video src="${u.preview}" poster="${u.poster || ""}" muted loop playsinline autoplay controlslist="nodownload"></video>
+        <button class="reel-thumb" id="reelThumb" type="button" aria-label="Watch the full reel">
+          <video src="${u.preview}" poster="${u.poster || ""}" muted loop playsinline autoplay controlslist="nodownload"></video>
+          <span class="play">▶</span>
+        </button>
         <div>
           <div class="tag">${owned ? "Purchased" : "Add-on · sample preview"}</div>
           <h3>${u.name}</h3>
           <p>${u.description}</p>
-          ${owned ? `<span style="color:var(--ink-2)">Your reel is under My files.</span>` :
-            `<button class="btn ${inCart ? "ghost" : "gold"}" id="upsellBtn" type="button">${inCart ? "Remove reel" : `Add reel · ${money(u.price)}`}</button>`}
+          <div class="upsell-actions">
+            <button class="btn ghost" id="reelWatch" type="button">▶ Watch full reel</button>
+            ${owned ? `<span style="color:var(--ink-2)">Your reel is under My files.</span>` :
+              `<button class="btn ${inCart ? "ghost" : "gold"}" id="upsellBtn" type="button">${inCart ? "Remove reel" : `Add reel · ${money(u.price)}`}</button>`}
+          </div>
         </div>
       </div>`;
-    const v = slot.querySelector("video");
-    v.addEventListener("contextmenu", (e) => e.preventDefault());
-    v.addEventListener("click", () => { v.muted = !v.muted; });
+    slot.querySelector("video").addEventListener("contextmenu", (e) => e.preventDefault());
+    $("reelThumb").addEventListener("click", () => openReel(u));
+    $("reelWatch").addEventListener("click", () => openReel(u));
     const b = $("upsellBtn");
     if (b) b.addEventListener("click", () => toggleUpsell(u.id, !inCart));
   }
@@ -282,7 +289,7 @@
   }
   async function toggleUpsell(upsell, on) {
     const r = await api("/api/select", { method: "POST", body: JSON.stringify({ slug, upsell, on }) });
-    if (r.ok) { data = r.body; render(); } else toast(r.body.error || "Couldn't update");
+    if (r.ok) { data = r.body; render(); if (lbReel) reelPickLabel(); } else toast(r.body.error || "Couldn't update");
   }
 
   // ---------- checkout drawer ----------
@@ -323,12 +330,16 @@
   // ---------- lightbox ----------
   const lbOpen = () => $("lightbox").classList.contains("open");
   function openLightbox(id) {
+    lbReel = null;
     lbList = (tab === "owned" ? data.items.filter((i) => isOwned(i.id) && !i.upsellOnly) : visible(items()));
     lbIndex = Math.max(0, lbList.findIndex((i) => i.id === id));
     $("lightbox").classList.add("open"); $("scrim").classList.add("open");
     renderLightbox();
   }
-  function closeLightbox() { $("lightbox").classList.remove("open"); $("scrim").classList.remove("open"); $("lbStage").innerHTML = ""; }
+  function closeLightbox() {
+    lbReel = null;
+    $("lightbox").classList.remove("open", "reel"); $("scrim").classList.remove("open"); $("lbStage").innerHTML = "";
+  }
   function renderLightbox() {
     const it = lbList[lbIndex]; if (!it) return;
     const stage = $("lbStage");
@@ -336,11 +347,38 @@
       ? `<video src="${it.preview}" poster="${it.poster || ""}" autoplay loop playsinline controls controlslist="nodownload noplaybackrate" disablepictureinpicture></video>`
       : `<img src="${it.preview}" alt="${it.title}">`;
     stage.firstElementChild.addEventListener("contextmenu", (e) => e.preventDefault());
+    $("lbFull").classList.toggle("hidden", it.type !== "video");
     const b = $("lbPick");
     if (isOwned(it.id)) { b.textContent = "Yours: download in My files"; b.disabled = true; }
     else { b.disabled = false; b.textContent = isPicked(it.id) ? `✓ Picked (${pickLabel(it.id)}). Tap to remove` : "+ Add to picks"; }
   }
-  $("lbPick").addEventListener("click", () => { const it = lbList[lbIndex]; if (it) toggle(it.id); });
+
+  // The add-on reel: full length, from the start, with sound and controls.
+  function openReel(u) {
+    lbReel = u;
+    $("lightbox").classList.add("open", "reel"); $("scrim").classList.add("open");
+    const stage = $("lbStage");
+    stage.innerHTML = `<video src="${u.preview}" poster="${u.poster || ""}" autoplay playsinline controls controlslist="nodownload noplaybackrate" disablepictureinpicture></video>`;
+    stage.firstElementChild.addEventListener("contextmenu", (e) => e.preventDefault());
+    $("lbFull").classList.remove("hidden");
+    reelPickLabel();
+  }
+  function reelPickLabel() {
+    const u = lbReel, b = $("lbPick");
+    if (isOwned(u.unlocks)) { b.textContent = "Yours: download in My files"; b.disabled = true; return; }
+    b.disabled = false;
+    b.textContent = data.state.cartUpsells.includes(u.id) ? "✓ Reel added. Tap to remove" : `Add reel · ${money(u.price)}`;
+  }
+  function goFullscreen() {
+    const v = $("lbStage").querySelector("video"); if (!v) return;
+    if (v.requestFullscreen) v.requestFullscreen().catch(() => {});
+    else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen(); // iPhone Safari
+  }
+  $("lbFull").addEventListener("click", goFullscreen);
+  $("lbPick").addEventListener("click", () => {
+    if (lbReel) return toggleUpsell(lbReel.id, !data.state.cartUpsells.includes(lbReel.id));
+    const it = lbList[lbIndex]; if (it) toggle(it.id);
+  });
   $("lbPrev").addEventListener("click", () => { lbIndex = (lbIndex - 1 + lbList.length) % lbList.length; renderLightbox(); });
   $("lbNext").addEventListener("click", () => { lbIndex = (lbIndex + 1) % lbList.length; renderLightbox(); });
   $("lbClose").addEventListener("click", closeLightbox);
@@ -348,6 +386,7 @@
   document.addEventListener("keydown", (e) => {
     if (!lbOpen()) { if (e.key === "Escape") closeDrawers(); return; }
     if (e.key === "Escape") closeLightbox();
+    if (lbReel) return;
     if (e.key === "ArrowLeft") $("lbPrev").click();
     if (e.key === "ArrowRight") $("lbNext").click();
   });
