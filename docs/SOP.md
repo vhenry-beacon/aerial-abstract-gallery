@@ -100,6 +100,27 @@ Commit the new `clients/<slug>/` folder and its `public/media/<slug>/` previews 
 2. Choose the client and drag everything from `work/<slug>/full/` onto the drop zone. Files split for transport (`.001`, `.002`, …) can be dropped together, and they're rejoined automatically.
 3. Every row in **Items** should say *uploaded*. Use **Test download** on one clip.
 
+### 0. Keri starts a project (admin home)
+`/admin/` shows a tile per project (cover, client, date, status: Quote → Files uploaded → With Claude → Keri reviewing → Published → Paid). **+ New project** asks for a name, client and date, then opens the project page:
+- **Quote:** client contact, event, package name and price, deliverables included, price per extra, add-ons, due date, and the full quote details. These numbers become the gallery's pricing.
+- **Instructions for Claude:** how to edit (look, clip length, must-have shots, reel style).
+- **Files:** drop the whole shoot; it uploads straight to R2 at `raw/<project-id>/`, folders kept, resumable.
+- **Send to Claude**, with an optional note. The project moves to *With Claude*.
+
+Claude then builds the gallery:
+```
+.venv/bin/python tools/project.py list                      # what's been sent
+.venv/bin/python tools/project.py show --id <id>            # quote, instructions, note, file list
+.venv/bin/python tools/project.py fetch --id <id> --to <scratch dir>   # raw files (delete after)
+# process_photos.py / process_clips.py into work/<slug>/ (steps 3-5 below)
+.venv/bin/python tools/project.py scaffold --id <id> [--slug S]  # client.json from the quote + new access code (stored on the project, not printed)
+python3 tools/build_manifest.py --slug <slug> --work work/<slug>
+.venv/bin/python tools/project.py upload-full --slug <slug> --dir work/<slug>/full
+netlify deploy --prod --build
+.venv/bin/python tools/project.py link --id <id> --slug <slug>   # gallery link + access code appear on the project page
+```
+Only a reel add-on becomes a gallery add-on automatically; other add-ons are handled by hand.
+
 ### 8b. Keri reviews everything in the studio, then publishes
 Every new gallery starts **unpublished**: the access code works, but the client sees "Your gallery is being finished" until Keri publishes it. Once published, the client sees **only items Keri approved** (plus anything they already own).
 
@@ -109,7 +130,11 @@ Keri opens `/admin/studio/` (or **Review studio** on the admin page):
 - **Upload files:** drop a whole shoot (files or folders, raw and edited) and it uploads straight to R2 under `raw/<project>/`, in 16 MB parts, 3 files at a time. Interrupted? Drop the same files again and it resumes. Files already there are skipped. Everything uploaded is listed with a download link.
 - **Publish gallery** (top right) when she's happy. **Preview as client** shows exactly what the client will see.
 
-Then Claude applies her requests:
+**Edit queued / Note for Claude.** Saving a look, speed or trim marks the item *⏳ Edit queued*; the **auto-editor** (below) renders it within about 15 minutes while Vernon's Mac is on, and it comes back *Updated, check it*. A written note marks it *💬 Note for Claude*: those need Claude's judgment, so Keri tells Vernon (or Claude) "Keri left notes". The banner at the top of the studio shows both, and when the auto-editor last checked in.
+
+**Auto-editor:** `tools/autorender.sh` → `studio.py auto`, every 15 minutes via the LaunchAgent `com.aerialabstract.autorender` (install with `bash tools/install_autorender.sh`, remove with `--remove`; log in `~/Library/Logs/aerial-abstract-autorender.log`). Each round: render every gallery's queued requests, deploy, make a local git commit (pushing happens in a normal session), and report to the site. Its notes are signed "Auto-editor", so they don't count as answering Keri's written notes.
+
+Claude handles notes (and can render by hand):
 ```
 .venv/bin/python tools/studio.py status --slug <slug>     # read Keri's notes and edit requests
 .venv/bin/python tools/studio.py set --slug <slug> --id clip-03 --trim 0.8:3.0   # turn a note into an exact edit
