@@ -3,6 +3,7 @@ import {
   getClient, listClients, getState, saveState, quote, fulfillOrder, saveOrder, getOrder, listOrders,
   json, signToken, cookieName, setCookieHeader, isClientAuthed, isAdmin, checkAdminPassword, sha256Hex,
   fileStore, PART_SIZE, stripe, stripeKey, verifyStripeSignature, siteUrl,
+  r2, r2Key, r2Presign, r2Head, storageMode,
 } from "../../lib/core.mjs";
 
 const bad = (msg: string, status = 400) => json({ error: msg }, { status });
@@ -182,6 +183,7 @@ export default async (req: Request, context: Context) => {
           clients: listClients().map((c: any) => ({ slug: c.slug, clientName: c.clientName, eventName: c.eventName, items: c.items.length })),
           paymentsEnabled: !!stripeKey(),
           stripeMode: stripeKey()?.startsWith("sk_live") ? "live" : stripeKey() ? "test" : "off",
+          storage: storageMode(),
         });
       }
 
@@ -192,6 +194,26 @@ export default async (req: Request, context: Context) => {
       if (route === "admin/state" && m === "GET") {
         const p = await galleryPayload(client);
         return json({ ...p, items: client.items.map((i: any) => ({ ...i, ready: p.items.find((x: any) => x.id === i.id)?.ready })), orders: await listOrders(slug), files: await fileMetas(slug) });
+      }
+
+      // R2: browser uploads straight to Cloudflare with a short-lived signed URL.
+      if (route === "admin/upload-url" && m === "POST") {
+        if (!r2()) return bad("R2 storage isn't configured");
+        const { id } = await readJson(req);
+        if (!client.items.some((i: any) => i.id === id)) return bad("Unknown item id");
+        return json({ url: await r2Presign("PUT", r2Key(slug, id), 3600) });
+      }
+      if (route === "admin/upload-done" && m === "POST") {
+        if (!r2()) return bad("R2 storage isn't configured");
+        const { id, name, type } = await readJson(req);
+        if (!client.items.some((i: any) => i.id === id)) return bad("Unknown item id");
+        const head = await r2Head(r2Key(slug, id));
+        if (!head) return bad("Upload not found in storage; try again", 409);
+        await fileStore().setJSON(`meta/${slug}/${id}`, {
+          storage: "r2", size: head.size, filename: name || id,
+          contentType: type || "application/octet-stream", uploadedAt: new Date().toISOString(),
+        });
+        return json({ ok: true, size: head.size });
       }
 
       if (route === "admin/upload" && m === "PUT") {

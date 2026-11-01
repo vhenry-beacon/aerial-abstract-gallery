@@ -6,10 +6,11 @@
     "build": "node tools/build-registry.mjs"
   },
   "dependencies": {
-    "@netlify/blobs": "^8.1.0"
+    "@netlify/blobs": "^8.2.0",
+    "aws4fetch": "^1.0.20"
   },
   "devDependencies": {
-    "@netlify/functions": "^3.0.0",
-    "@netlify/edge-functions": "^2.11.0"
+    "@netlify/edge-functions": "^2.11.0",
+    "@netlify/functions": "^3.0.0"
   }
 }

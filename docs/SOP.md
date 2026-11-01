@@ -8,7 +8,7 @@ How to deliver a shoot through a private client gallery, from footage to payment
 
 - **One website, many galleries.** The site is `aerial-abstract-gallery.netlify.app`, and each client gets a private gallery at `/g/<client-slug>`, protected by an access code.
 - **Previews are public-safe.** The client browses watermarked, reduced-size previews.
-- **Full-quality files are private.** They are stored in Netlify Blobs and can be downloaded only for items the client has picked within their package or paid for.
+- **Full-quality files are private.** They are stored in a Cloudflare R2 bucket (or Netlify Blobs if R2 isn't configured). Clients get a 10-minute download link only for items they've picked within their package or paid for.
 - **Pricing is in each client's config file.** That covers the package price, how many deliverables are included, the price per extra, and add-ons. Nothing is hardcoded.
 - **Stripe handles payment.** The site calculates the total on the server, sends the client to Stripe Checkout, and unlocks the files when payment succeeds.
 - **The admin page** (`/admin`) is where Keri uploads full-quality files, sees orders, and marks offline payments (PayPal, Zelle, check).
@@ -93,11 +93,7 @@ python3 tools/build_manifest.py --slug <slug> --work work/<slug>
 ```
 
 ### 7. Publish the site
-From the project folder on the Mac:
-```
-npx -y @netlify/mcp@latest --site-id 1fd12ec1-914f-4f2c-aecf-e266faea0416 --proxy-path "<fresh link from Claude>"
-```
-Or ask Claude to "deploy the gallery". Netlify runs `npm run build`, which bundles every client config.
+Commit the new `clients/<slug>/` folder and its `public/media/<slug>/` previews to GitHub (or ask Claude to). Netlify publishes automatically within about 2 minutes.
 
 ### 8. Upload the full-quality files
 1. Open `https://aerial-abstract-gallery.netlify.app/admin` and sign in.
@@ -125,7 +121,15 @@ Email the client:
 | `SESSION_SECRET` | Signs client and admin sessions. Long random string. Set. |
 | `ADMIN_PASSWORD` | Keri's admin sign-in. Set. Change any time, then redeploy. |
 | `STRIPE_SECRET_KEY` | Keri's Stripe key (`sk_test_…` while testing, `sk_live_…` when live). **Keri adds this herself.** |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Cloudflare R2 storage for full-quality files. From Cloudflare → R2 → Manage API tokens (Object Read & Write, scoped to the bucket). Paste them here, never in chat. |
 | `STRIPE_WEBHOOK_SECRET` | Optional backup confirmation. Stripe → Developers → Webhooks → add endpoint `https://aerial-abstract-gallery.netlify.app/api/stripe-webhook`, event `checkout.session.completed`, then copy the signing secret here. |
+
+**R2 bucket CORS** (Cloudflare → R2 → bucket → Settings → CORS policy). This lets the admin page upload straight from the browser:
+```json
+[{"AllowedOrigins":["https://aerial-abstract-gallery.netlify.app"],"AllowedMethods":["PUT","GET","HEAD"],"AllowedHeaders":["content-type"],"MaxAgeSeconds":3600}]
+```
+
+**Code and deploys:** the code lives in GitHub (`vhenry-beacon/aerial-abstract-gallery`). Netlify is linked to it, so every push to `main` publishes automatically. Ask Claude to make a change, and Claude pushes it.
 
 **Visitor access:** in Netlify → Site configuration → Access & security → Visitor access, production must **not** require Netlify team login, or clients can't open their gallery.
 

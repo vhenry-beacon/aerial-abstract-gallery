@@ -4,6 +4,7 @@
   const PART = 3.5 * 1024 * 1024;
   let slug = null;
   let st = null;
+  let storage = "blobs";
 
   async function api(path, opts = {}) {
     const res = await fetch(path, { credentials: "same-origin", headers: { "content-type": "application/json" }, ...opts });
@@ -16,7 +17,8 @@
     const r = await api("/api/admin/clients");
     if (r.status === 401) { $("login").classList.remove("hidden"); $("app").classList.add("hidden"); return; }
     $("login").classList.add("hidden"); $("app").classList.remove("hidden");
-    $("mode").innerHTML = `Stripe: <b>${r.body.stripeMode}</b>`;
+    storage = r.body.storage || "blobs";
+    $("mode").innerHTML = `Stripe: <b>${r.body.stripeMode}</b> · Storage: <b>${storage === "r2" ? "Cloudflare R2" : "Netlify"}</b>`;
     $("client").innerHTML = r.body.clients.map((c) => `<option value="${c.slug}">${c.clientName} · ${c.eventName}</option>`).join("");
     slug = new URLSearchParams(location.search).get("client") || r.body.clients[0]?.slug;
     $("client").value = slug;
@@ -84,9 +86,40 @@
     const base = file.name.replace(/\.[^.]+$/, "").toLowerCase();
     return st.items.find((i) => (i.fullFile || "").toLowerCase() === file.name.toLowerCase()) || st.items.find((i) => i.id.toLowerCase() === base);
   }
+  function putWithProgress(url, file, label) {
+    return new Promise((resolve) => {
+      const x = new XMLHttpRequest();
+      let lastPct = -10;
+      x.open("PUT", url);
+      x.setRequestHeader("content-type", file.type || "application/octet-stream");
+      x.upload.onprogress = (e) => {
+        if (!e.lengthComputable) return;
+        const pct = Math.floor((e.loaded / e.total) * 100);
+        if (pct >= lastPct + 25) { lastPct = pct; log(`     ${label} ${pct}%`); }
+      };
+      x.onload = () => resolve(x.status >= 200 && x.status < 300);
+      x.onerror = () => resolve(false);
+      x.send(file);
+    });
+  }
+  async function uploadToR2(file, item) {
+    const q = `slug=${encodeURIComponent(slug)}`;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const u = await api(`/api/admin/upload-url?${q}`, { method: "POST", body: JSON.stringify({ id: item.id }) });
+      if (!u.ok) { log(`FAIL ${file.name}: ${u.body.error}`); return; }
+      if (await putWithProgress(u.body.url, file, file.name)) {
+        const d = await api(`/api/admin/upload-done?${q}`, { method: "POST", body: JSON.stringify({ id: item.id, name: file.name, type: file.type }) });
+        if (d.ok) { log(`OK   ${file.name} → ${item.id} (${(file.size / 1048576).toFixed(1)} MB)`); return; }
+      }
+      log(`     retrying ${file.name}…`);
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    log(`FAIL ${file.name}: upload to Cloudflare didn't complete. Check the bucket's CORS policy.`);
+  }
   async function uploadFile(file) {
     const item = matchItem(file);
     if (!item) { log(`SKIP ${file.name}: no gallery item with that name`); return; }
+    if (storage === "r2") return uploadToR2(file, item);
     const total = Math.max(1, Math.ceil(file.size / PART));
     for (let p = 0; p < total; p++) {
       const chunk = file.slice(p * PART, Math.min(file.size, (p + 1) * PART));
