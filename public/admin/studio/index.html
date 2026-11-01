@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Review Studio · Aerial Abstract</title>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Instrument+Serif&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="stylesheet" href="/assets/studio.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <div class="brand">Aerial Abstract · Review studio</div>
+      <div class="contact"><a href="/admin/">Gallery admin</a></div>
+    </header>
+
+    <section id="login" class="login hidden">
+      <form id="loginForm">
+        <h1>Review studio</h1>
+        <input class="field" id="pw" type="password" placeholder="Admin password" autocomplete="current-password" required>
+        <div class="err" id="loginErr"></div>
+        <button class="btn" style="width:100%">Sign in</button>
+      </form>
+    </section>
+
+    <section id="app" class="hidden">
+      <div class="st-head">
+        <label>Gallery&nbsp;<select id="client" class="field st-select"></select></label>
+        <div class="st-publish">
+          <span id="pubText"></span>
+          <button class="btn small" id="pubBtn" type="button"></button>
+          <a id="previewLink" target="_blank">Preview as client ↗</a>
+        </div>
+      </div>
+
+      <nav class="tabs" role="tablist" id="stTabs">
+        <button class="tab" data-tab="items" aria-selected="true" type="button">Photos &amp; clips</button>
+        <button class="tab" data-tab="reel" aria-selected="false" type="button">Highlight reel</button>
+        <button class="tab" data-tab="upload" aria-selected="false" type="button">Upload files</button>
+      </nav>
+
+      <!-- ============ photos & clips ============ -->
+      <div id="tab-items">
+        <div class="st-filters" id="filters"></div>
+        <div class="st-layout">
+          <div class="st-grid" id="grid"></div>
+          <div class="st-editor" id="editor">
+            <p class="empty">Pick a photo or clip to review it.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ highlight reel ============ -->
+      <div id="tab-reel" class="hidden">
+        <div class="st-layout reel">
+          <div class="st-reel-player">
+            <div class="st-frame" id="reelFrame">
+              <video id="reelVideo" playsinline muted controlslist="nodownload noplaybackrate" disablepictureinpicture></video>
+              <div class="st-title-overlay" id="reelTitle"></div>
+            </div>
+            <div class="st-reel-controls">
+              <button class="btn small" id="reelPlay" type="button">▶ Play reel</button>
+              <span id="reelClock" class="st-muted">0:00 / 0:00</span>
+            </div>
+            <p class="st-muted st-small">Preview is approximate: transitions, titles and color are finished in the final render.</p>
+          </div>
+          <div class="st-reel-side">
+            <div class="st-status-row" id="reelStatus"></div>
+            <h3>Pieces <span class="st-muted st-small">drag to reorder</span></h3>
+            <div class="st-timeline" id="timeline"></div>
+            <div class="st-piece" id="pieceEditor"></div>
+            <details class="st-add">
+              <summary>+ Add a piece from a clip</summary>
+              <div class="st-clip-pick" id="clipPick"></div>
+            </details>
+            <h3>Titles, music and overall look</h3>
+            <div class="st-form" id="reelForm"></div>
+            <h3>Notes on the reel</h3>
+            <div id="reelNotes"></div>
+            <div class="st-save-row">
+              <span class="st-muted st-small" id="reelDirty"></span>
+              <button class="btn" id="reelSave" type="button">Save reel changes</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ uploads ============ -->
+      <div id="tab-upload" class="hidden">
+        <p class="st-muted">Drop a whole shoot here: raw photos, raw video, edited exports, anything. Files go straight to the cloud (Cloudflare R2), so nothing needs to stay on your computer once they show up below. Keep this page open until the uploads finish. If one gets interrupted, drop the same files again and it picks up where it left off.</p>
+        <div class="st-proj">
+          <label>Project&nbsp;<select id="proj" class="field st-select"></select></label>
+          <button class="btn ghost small" id="newProj" type="button">+ New project</button>
+        </div>
+        <div class="drop st-drop" id="drop">
+          <b>Drop files or whole folders here</b><br>
+          <span class="st-muted">or</span>
+          <label class="st-linkbtn">choose files<input type="file" id="pickFiles" multiple hidden></label>
+          <span class="st-muted">·</span>
+          <label class="st-linkbtn">choose a folder<input type="file" id="pickFolder" webkitdirectory multiple hidden></label>
+        </div>
+        <div id="upOverall"></div>
+        <div id="upList" class="st-uplist"></div>
+        <h3>In the cloud <span class="st-muted st-small" id="cloudSum"></span></h3>
+        <div class="scroll"><table class="t" id="cloudFiles"></table></div>
+      </div>
+      <div style="height:60px"></div>
+    </section>
+  </div>
+  <script src="/assets/looks.js"></script>
+  <script src="/assets/studio.js"></script>
+</body>
+</html>

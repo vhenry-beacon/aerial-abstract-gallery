@@ -100,6 +100,30 @@ Commit the new `clients/<slug>/` folder and its `public/media/<slug>/` previews 
 2. Choose the client and drag everything from `work/<slug>/full/` onto the drop zone. Files split for transport (`.001`, `.002`, …) can be dropped together, and they're rejoined automatically.
 3. Every row in **Items** should say *uploaded*. Use **Test download** on one clip.
 
+### 8b. Keri reviews everything in the studio, then publishes
+Every new gallery starts **unpublished**: the access code works, but the client sees "Your gallery is being finished" until Keri publishes it. Once published, the client sees **only items Keri approved** (plus anything they already own).
+
+Keri opens `/admin/studio/` (or **Review studio** on the admin page):
+- **Photos & clips:** for each item, **Approve**, **Needs edits** or **Remove**. To ask for changes she can pick a **look** (Bright & clean, Warm golden, Cool blue, Vivid, Cinematic, Soft matte, Black & white, Vintage, plus fine-tune sliders), a **speed** (0.25× to 4×), a **trim** (start and end), and leave **notes**, optionally pinned to a moment in the clip. The preview shows the look and speed live (an approximation), then she clicks **Save edit request**.
+- **Highlight reel:** the reel is a row of pieces (clip + start + end). She can drag pieces to reorder them, change each piece's start/end, speed and look, add or remove pieces, and set the title, subtitle, closing text, transitions, overall look and music. **Play reel** previews it in order.
+- **Upload files:** drop a whole shoot (files or folders, raw and edited) and it uploads straight to R2 under `raw/<project>/`, in 16 MB parts, 3 files at a time. Interrupted? Drop the same files again and it resumes. Files already there are skipped. Everything uploaded is listed with a download link.
+- **Publish gallery** (top right) when she's happy. **Preview as client** shows exactly what the client will see.
+
+Then Claude applies her requests:
+```
+.venv/bin/python tools/studio.py status --slug <slug>     # read Keri's notes and edit requests
+.venv/bin/python tools/studio.py set --slug <slug> --id clip-03 --trim 0.8:3.0   # turn a note into an exact edit
+.venv/bin/python tools/studio.py render --slug <slug>    # render every changed request (or --ids clip-03,photo-02)
+.venv/bin/python tools/studio.py render --slug <slug> --reel [--music licensed-track.mp3]
+.venv/bin/python tools/studio.py reply --slug <slug> --id clip-03 --text "..."   # answer a note (--id reel for the reel)
+npm run build && netlify deploy --prod --build            # previews and manifest changed: publish and commit
+```
+- Edits always start from the **untouched original**, kept at `orig/<slug>/<id>` in R2 (copied from `full/` the first time an item is edited). Clearing an edit copies the original back byte for byte.
+- Each render uploads the new full-quality file, regenerates the watermarked preview (with a `?v=` cache-buster), and marks the item **Updated, check it** with a note from Claude saying what changed. Keri approves it or leaves another note.
+- Slow motion is smoothed with motion interpolation: about 25 seconds of work per second of 4K output on the M1 Max. The reel renders in about a minute.
+- The full-quality reel is uploaded to the gallery **only when `--music` is given** (a licensed track). Without music, only the preview is updated.
+- One-time setup on a new Mac: `python3 -m venv .venv && .venv/bin/pip install pillow numpy pillow-heif` (ffmpeg via Homebrew).
+
 ### 9. Send the client their link
 Email the client:
 > Your Fall Festival gallery is ready: https://aerial-abstract-gallery.netlify.app/g/<slug>

@@ -7,9 +7,11 @@ TEXT = "AERIAL ABSTRACT  ·  PREVIEW"
 
 
 def _font(size):
-    for p in (FONT_BOLD, "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"):
+    # Linux (original build machine) first, then macOS system fonts: Avenir Next Demi Bold, Arial Bold.
+    for p, idx in ((FONT_BOLD, 0), ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 0),
+                   ("/System/Library/Fonts/Avenir Next.ttc", 2), ("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 0)):
         try:
-            return ImageFont.truetype(p, size)
+            return ImageFont.truetype(p, size, index=idx)
         except OSError:
             pass
     return ImageFont.load_default()

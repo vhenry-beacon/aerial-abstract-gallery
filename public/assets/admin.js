@@ -34,6 +34,7 @@
 
   async function refresh() {
     $("openGallery").href = `/g/${slug}`;
+    $("openStudio").href = `/admin/studio/?client=${encodeURIComponent(slug)}`;
     const r = await api(`/api/admin/state?slug=${encodeURIComponent(slug)}`);
     if (!r.ok) { alert(r.body.error); return; }
     st = r.body;

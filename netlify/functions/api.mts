@@ -4,6 +4,8 @@ import {
   json, signToken, cookieName, setCookieHeader, isClientAuthed, isAdmin, checkAdminPassword, sha256Hex,
   fileStore, PART_SIZE, stripe, stripeKey, verifyStripeSignature, siteUrl,
   r2, r2Key, r2Presign, r2Head, storageMode,
+  r2List, r2MultipartStart, r2PartUrl, r2MultipartParts, r2MultipartComplete, r2MultipartAbort,
+  getReview, saveReview, clientCanSee, REVIEW_STATUSES,
 } from "../../lib/core.mjs";
 
 const bad = (msg: string, status = 400) => json({ error: msg }, { status });
@@ -29,12 +31,16 @@ async function fileMetas(slug: string) {
   return out;
 }
 
-async function galleryPayload(client: any) {
+// `admin` = Keri previewing: she sees exactly what the client will see once the gallery is published.
+async function galleryPayload(client: any, admin = false) {
   const state = await getState(client);
   const metas = await fileMetas(client.slug);
+  const review = await getReview(client.slug);
+  const asPublished = admin ? { ...review, published: true } : review;
+  const visible = client.items.filter((i: any) => clientCanSee(i, asPublished, state));
   return {
     client: publicClient(client),
-    items: client.items.map((i: any) => ({
+    items: visible.map((i: any) => ({
       id: i.id, type: i.type, title: i.title, preview: i.preview, poster: i.poster,
       duration: i.duration, orientation: i.orientation, upsellOnly: !!i.upsellOnly,
       ready: !!metas[i.id],
@@ -42,8 +48,55 @@ async function galleryPayload(client: any) {
     state: { packagePaid: state.packagePaid, selected: state.selected, cartUpsells: state.cartUpsells, purchased: state.purchased },
     quote: quote(client, state),
     paymentsEnabled: !!stripeKey(),
+    ...(admin ? { adminPreview: { published: review.published, hidden: client.items.length - visible.length } } : {}),
   };
 }
+
+// Edit requests from the studio. Numbers are clamped so the renderer can trust them.
+const num = (v: any, lo: number, hi: number, d = 0) => (Number.isFinite(Number(v)) ? Math.min(hi, Math.max(lo, Number(v))) : d);
+const LOOKS = ["original", "bright", "warm", "cool", "vivid", "cinematic", "matte", "bw", "vintage"];
+const SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 4];
+function cleanLook(l: any) {
+  if (!l) return null;
+  return {
+    preset: LOOKS.includes(l.preset) ? l.preset : "original",
+    brightness: num(l.brightness, -0.5, 0.5), contrast: num(l.contrast, -0.5, 0.5),
+    saturation: num(l.saturation, -1, 1), warmth: num(l.warmth, -1, 1), fade: num(l.fade, 0, 1),
+  };
+}
+function cleanEdit(e: any, item: any) {
+  if (!e) return null;
+  const out: any = { look: cleanLook(e.look) };
+  if (item.type === "video") {
+    out.speed = SPEEDS.includes(Number(e.speed)) ? Number(e.speed) : 1;
+    const dur = Number(item.duration) || 3600;
+    if (Array.isArray(e.trim)) {
+      const a = num(e.trim[0], 0, dur), b = num(e.trim[1], 0, dur, dur);
+      out.trim = b - a >= 0.5 ? [Math.round(a * 100) / 100, Math.round(b * 100) / 100] : null;
+    }
+  }
+  return out;
+}
+function cleanReel(r: any, client: any) {
+  const clips = new Map(client.items.filter((i: any) => i.type === "video" && !i.upsellOnly).map((i: any) => [i.id, i]));
+  const pieces = (r.pieces || []).slice(0, 40).flatMap((p: any) => {
+    const c: any = clips.get(p.clip);
+    if (!c) return [];
+    const a = num(p.in, 0, c.duration), b = num(p.out, 0, c.duration, c.duration);
+    if (b - a < 0.3) return [];
+    return [{ clip: c.id, in: Math.round(a * 100) / 100, out: Math.round(b * 100) / 100,
+      speed: SPEEDS.includes(Number(p.speed)) ? Number(p.speed) : 1, look: cleanLook(p.look) }];
+  });
+  const text = (s: any, n = 80) => String(s ?? "").slice(0, n);
+  return {
+    pieces, look: cleanLook(r.look), title: text(r.title), subtitle: text(r.subtitle), endcard: text(r.endcard),
+    transition: r.transition === "cut" ? "cut" : "fade", music: text(r.music, 300),
+  };
+}
+
+// Raw-upload projects are folders under raw/ in R2 (a gallery slug or any other short name).
+const projectName = (p: any) => String(p || "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+const safePath = (p: any) => String(p || "").replace(/\\/g, "/").split("/").filter((s) => s && s !== "." && s !== ".." && !s.startsWith("._")).join("/").slice(0, 400);
 
 async function readJson(req: Request) {
   try { return await req.json(); } catch { return {}; }
@@ -71,7 +124,11 @@ export default async (req: Request, context: Context) => {
       if (!(await isClientAuthed(req, client.slug))) {
         return json({ needsLogin: true, client: { clientName: client.clientName, eventName: client.eventName, provider: client.provider } }, { status: 401 });
       }
-      return json(await galleryPayload(client));
+      const admin = await isAdmin(req);
+      if (!admin && !(await getReview(client.slug)).published) {
+        return json({ notPublished: true, client: { clientName: client.clientName, eventName: client.eventName, provider: client.provider } });
+      }
+      return json(await galleryPayload(client, admin));
     }
 
     if (route === "select" && m === "POST") {
@@ -88,11 +145,14 @@ export default async (req: Request, context: Context) => {
         const item = client.items.find((i: any) => i.id === id && !i.upsellOnly);
         if (!item) return bad("Unknown item");
         if (state.purchased[id]) return bad("Already yours");
+        const admin = await isAdmin(req);
+        const review = await getReview(slug);
+        if (on && !clientCanSee(item, admin ? { ...review, published: true } : review, state)) return bad("That item isn't available yet");
         state.selected = state.selected.filter((x: string) => x !== id);
         if (on) state.selected.push(id);
       }
       await saveState(client, state);
-      return json(await galleryPayload(client));
+      return json(await galleryPayload(client, await isAdmin(req)));
     }
 
     if (route === "checkout" && m === "POST") {
@@ -111,7 +171,7 @@ export default async (req: Request, context: Context) => {
         // Package already paid and picks fit inside the remaining included slots: no charge.
         await saveOrder(order);
         await fulfillOrder(client, order, "included");
-        return json({ claimed: true, ...(await galleryPayload(client)) });
+        return json({ claimed: true, ...(await galleryPayload(client, await isAdmin(req))) });
       }
       if (!stripeKey()) return bad("Online payment isn't switched on yet. Your picks are saved. Keri will follow up with a payment link.", 503);
       const base = siteUrl(req);
@@ -187,13 +247,120 @@ export default async (req: Request, context: Context) => {
         });
       }
 
+      // ---- raw uploads: whole shoots go straight to Cloudflare R2 under raw/<project>/ ----
+      if (route.startsWith("admin/raw/")) {
+        if (!r2()) return bad("R2 storage isn't configured");
+        const body: any = m === "POST" ? await readJson(req) : {};
+        const project = projectName(url.searchParams.get("project") || body.project);
+        if (route === "admin/raw/projects" && m === "GET") {
+          const { folders } = await r2List("raw/", "/");
+          const names = new Set([...folders.map((f: string) => f.slice(4).replace(/\/$/, "")), ...listClients().map((c: any) => c.slug)]);
+          return json({ projects: [...names].sort() });
+        }
+        if (!project) return bad("Choose a project name first");
+        const prefix = `raw/${project}/`;
+        if (route === "admin/raw/list" && m === "GET") {
+          const { files } = await r2List(prefix);
+          return json({ project, files: files.map((f: any) => ({ ...f, path: f.key.slice(prefix.length) })) });
+        }
+        if (route === "admin/raw/url" && m === "GET") {
+          const path = safePath(url.searchParams.get("path"));
+          const name = path.split("/").pop()!.replace(/"/g, "");
+          return json({ url: await r2Presign("GET", prefix + path, 3600, { "response-content-disposition": `attachment; filename="${name}"` }) });
+        }
+        const path = safePath(body.path);
+        if (!path) return bad("Missing file name");
+        const key = prefix + path;
+        if (route === "admin/raw/start" && m === "POST") {
+          const size = Number(body.size) || 0;
+          const existing = await r2Head(key);
+          if (existing && existing.size === size) return json({ key, done: true });
+          if (size <= 64 * 1024 * 1024) return json({ key, url: await r2Presign("PUT", key, 3600) });
+          return json({ key, uploadId: await r2MultipartStart(key, body.type) });
+        }
+        if (route === "admin/raw/parts" && m === "POST") {
+          const parts = await r2MultipartParts(key, String(body.uploadId || ""));
+          if (!parts) return bad("That upload expired; it will start over", 410);
+          return json({ parts });
+        }
+        if (route === "admin/raw/part-urls" && m === "POST") {
+          const nums = (body.parts || []).map(Number).filter((n: number) => n >= 1 && n <= 10000).slice(0, 50);
+          const urls: Record<number, string> = {};
+          for (const n of nums) urls[n] = await r2PartUrl(key, String(body.uploadId), n);
+          return json({ urls });
+        }
+        if (route === "admin/raw/complete" && m === "POST") {
+          await r2MultipartComplete(key, String(body.uploadId), (body.parts || []).map((p: any) => ({ n: Number(p.n), etag: String(p.etag) })));
+          const head = await r2Head(key);
+          return json({ key, size: head?.size ?? null });
+        }
+        if (route === "admin/raw/abort" && m === "POST") {
+          await r2MultipartAbort(key, String(body.uploadId || ""));
+          return json({ ok: true });
+        }
+        return bad("Not found", 404);
+      }
+
       const slug = url.searchParams.get("slug") || "";
       const client = getClient(slug);
       if (!client) return bad("Unknown client", 404);
 
       if (route === "admin/state" && m === "GET") {
+        const metas = await fileMetas(slug);
         const p = await galleryPayload(client);
-        return json({ ...p, items: client.items.map((i: any) => ({ ...i, ready: p.items.find((x: any) => x.id === i.id)?.ready })), orders: await listOrders(slug), files: await fileMetas(slug) });
+        return json({ ...p, items: client.items.map((i: any) => ({ ...i, ready: !!metas[i.id] })), orders: await listOrders(slug), files: metas });
+      }
+
+      // ---- review studio ----
+      if (route === "admin/review" && m === "GET") {
+        const metas = await fileMetas(slug);
+        return json({
+          client: publicClient(client), review: await getReview(slug),
+          items: client.items.map((i: any) => ({ ...i, ready: !!metas[i.id] })),
+        });
+      }
+      if (route === "admin/review" && m === "POST") {
+        const b: any = await readJson(req);
+        const review = await getReview(slug);
+        const at = new Date().toISOString();
+        const by = b.by === "Claude" ? "Claude" : "Keri";
+        const note = (n: any) => n && String(n.text || "").trim()
+          ? { t: Number.isFinite(Number(n.t)) && n.t !== null ? Math.max(0, Number(n.t)) : null, text: String(n.text).trim().slice(0, 2000), by, at }
+          : null;
+        if (typeof b.published === "boolean") review.published = b.published;
+        if (b.id) {
+          const item = client.items.find((i: any) => i.id === b.id);
+          if (!item) return bad("Unknown item");
+          const r = review.items[b.id] ||= { status: "new", edit: null, notes: [], version: 0 };
+          if (b.status !== undefined) {
+            if (!REVIEW_STATUSES.includes(b.status)) return bad("Unknown status");
+            r.status = b.status;
+          }
+          if (b.edit !== undefined) {
+            r.edit = cleanEdit(b.edit, item);
+            if (b.status === undefined && by === "Keri") r.status = r.edit ? "edits" : r.status;
+          }
+          const n = note(b.note);
+          if (n) { r.notes.push(n); if (b.status === undefined && by === "Keri" && r.status !== "remove") r.status = "edits"; }
+          if (Number.isInteger(b.deleteNote)) r.notes.splice(b.deleteNote, 1);
+          if (Number.isInteger(b.version)) r.version = b.version;
+          // tools/studio.py records which edit the delivered file now reflects
+          if (by === "Claude" && b.rendered !== undefined) r.rendered = b.rendered === null ? null : { edit: cleanEdit(b.rendered, item), at };
+          r.updatedAt = at;
+        }
+        if (b.reel !== undefined || b.reelNote || b.reelStatus || b.reelRendered !== undefined) {
+          const reel = review.reel ||= { status: "new", pieces: [], notes: [], version: 0 };
+          if (b.reel) Object.assign(reel, cleanReel(b.reel, client), { status: by === "Keri" ? "edits" : reel.status });
+          const n = note(b.reelNote);
+          if (n) { reel.notes.push(n); if (by === "Keri") reel.status = "edits"; }
+          if (b.reelStatus && REVIEW_STATUSES.includes(b.reelStatus)) reel.status = b.reelStatus;
+          if (Number.isInteger(b.reelDeleteNote)) reel.notes.splice(b.reelDeleteNote, 1);
+          if (Number.isInteger(b.reelVersion)) reel.version = b.reelVersion;
+          if (by === "Claude" && b.reelRendered !== undefined) reel.rendered = b.reelRendered === null ? null : { plan: cleanReel(b.reelRendered, client), at };
+          reel.updatedAt = at;
+        }
+        await saveReview(slug, review);
+        return json({ review });
       }
 
       // R2: browser uploads straight to Cloudflare with a short-lived signed URL.

@@ -29,12 +29,35 @@
     const r = await api(`/api/gallery?slug=${encodeURIComponent(slug)}`);
     if (r.status === 401 && r.body.needsLogin) return showLogin(r.body.client);
     if (!r.ok) { document.body.innerHTML = `<p class='wrap' style='padding:40px 16px'>${r.body.error || "Gallery unavailable."}</p>`; return; }
+    if (r.body.notPublished) return showNotPublished(r.body.client);
     data = r.body;
     $("login").classList.add("hidden");
     $("app").classList.remove("hidden");
     renderStatic();
+    renderPreviewBanner();
     render();
     handleReturnParams();
+  }
+
+  // Keri hasn't published yet: the code works, but the gallery is still being finished.
+  function showNotPublished(c) {
+    showLogin(c);
+    const p = c.provider || {};
+    $("loginForm").innerHTML = `<div class="brand">${c.clientName}</div><h1>${c.eventName}</h1>
+      <p style="color:var(--ink-2)">Your gallery is being finished. ${p.person || "We"} will let you know as soon as it's ready.</p>
+      ${p.email ? `<p style="color:var(--ink-3);font-size:14px">Questions? <a href="mailto:${p.email}">${p.email}</a></p>` : ""}`;
+  }
+
+  // Signed in as admin: show what the client will see, and what's still hidden.
+  function renderPreviewBanner() {
+    const a = data.adminPreview;
+    if (!a || $("previewBanner")) return;
+    const b = document.createElement("div");
+    b.id = "previewBanner";
+    b.className = "preview-banner";
+    b.innerHTML = `<b>Admin preview.</b> ${a.published ? "This gallery is published." : "Not published yet: the client sees a “being finished” page."}
+      Only approved items are shown${a.hidden ? ` (${a.hidden} not approved yet)` : ""}. <a href="/admin/studio/?client=${encodeURIComponent(slug)}">Open the review studio</a>`;
+    $("app").prepend(b);
   }
 
   function showLogin(c) {
