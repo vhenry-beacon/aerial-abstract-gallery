@@ -1,0 +1,15 @@
+{
+  "name": "aerial-abstract-gallery",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node tools/build-registry.mjs"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
+  },
+  "devDependencies": {
+    "@netlify/functions": "^3.0.0",
+    "@netlify/edge-functions": "^2.11.0"
+  }
+}

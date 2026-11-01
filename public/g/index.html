@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Client Gallery · Aerial Abstract</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Instrument+Serif&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <div class="brand">Aerial Abstract</div>
+      <div class="contact" id="contact"></div>
+    </header>
+  </div>
+
+  <!-- Sign-in -->
+  <main id="login" class="wrap login hidden">
+    <form id="loginForm">
+      <div class="brand" id="loginEyebrow">Private gallery</div>
+      <h1 id="loginTitle">Your gallery</h1>
+      <p>Enter the access code from your email to view, select and download your photos and clips.</p>
+      <input class="field" id="code" autocomplete="one-time-code" placeholder="Access code" required style="text-align:center;letter-spacing:.12em;text-transform:uppercase">
+      <div class="err" id="loginErr"></div>
+      <button class="btn" style="width:100%">Open gallery</button>
+    </form>
+  </main>
+
+  <!-- Gallery -->
+  <main id="app" class="hidden">
+    <section class="wrap hero">
+      <div class="eyebrow" id="eyebrow"></div>
+      <h1 id="title"></h1>
+      <p id="welcome"></p>
+    </section>
+
+    <section class="wrap status">
+      <div>
+        <div class="count" id="countText"></div>
+        <div class="meter" id="meter"><span></span></div>
+      </div>
+      <button class="btn ghost" id="howBtn" type="button">How it works</button>
+    </section>
+
+    <section class="wrap">
+      <nav class="tabs" role="tablist" id="tabs">
+        <button class="tab" role="tab" data-tab="all" aria-selected="true">Everything</button>
+        <button class="tab" role="tab" data-tab="clips">Clips</button>
+        <button class="tab" role="tab" data-tab="photos">Photos</button>
+        <button class="tab" role="tab" data-tab="picked">My picks</button>
+        <button class="tab" role="tab" data-tab="owned">My files</button>
+      </nav>
+
+      <div id="upsellSlot"></div>
+      <div id="ownedPanel" class="hidden"></div>
+
+      <div id="clipsSection">
+        <div class="section-h"><h2>Clips</h2><span id="clipsCount"></span></div>
+        <div class="grid clips" id="clipsGrid"></div>
+      </div>
+      <div id="photosSection">
+        <div class="section-h"><h2>Photos</h2><span id="photosCount"></span></div>
+        <div class="grid photos" id="photosGrid"></div>
+      </div>
+      <div class="empty hidden" id="emptyMsg"></div>
+    </section>
+
+    <footer class="wrap" id="footer"></footer>
+
+    <div class="bar" id="bar">
+      <div class="wrap">
+        <div class="sum" id="barSum"></div>
+        <button class="btn" id="checkoutBtn" type="button">Review &amp; check out</button>
+      </div>
+    </div>
+  </main>
+
+  <div class="scrim" id="scrim"></div>
+
+  <aside class="drawer" id="drawer" aria-modal="true" role="dialog">
+    <h3>Your order</h3>
+    <table class="lines" id="lines"></table>
+    <div class="note hidden" id="drawerNote"></div>
+    <input class="field" id="email" type="email" placeholder="Email for your receipt">
+    <div class="err" id="checkoutErr"></div>
+    <div class="row">
+      <button class="btn ghost" id="drawerClose" type="button">Keep browsing</button>
+      <button class="btn" id="payBtn" type="button">Pay securely</button>
+    </div>
+    <p style="font-size:12px;color:var(--ink-3);margin:12px 0 0">Card payments are processed by Stripe. Full-quality files unlock here as soon as payment goes through.</p>
+  </aside>
+
+  <aside class="drawer" id="how" role="dialog">
+    <h3>How it works</h3>
+    <ol style="padding-left:18px;color:var(--ink-2);margin:0 0 16px">
+      <li>Tap the circle on any clip or photo to add it to your picks. Tap the image to see it larger.</li>
+      <li id="howIncluded"></li>
+      <li id="howExtra"></li>
+      <li>Check out to pay. Your full-quality, watermark-free files then appear under <b>My files</b> to download.</li>
+      <li>You can come back later to add more.</li>
+    </ol>
+    <button class="btn" style="width:100%" id="howClose" type="button">Got it</button>
+  </aside>
+
+  <div class="lightbox" id="lightbox">
+    <button class="nav close" id="lbClose" aria-label="Close">✕</button>
+    <div class="stage" id="lbStage"></div>
+    <div class="controls">
+      <button class="nav" id="lbPrev" aria-label="Previous">‹</button>
+      <button class="btn gold" id="lbPick" type="button"></button>
+      <button class="nav" id="lbNext" aria-label="Next">›</button>
+    </div>
+  </div>
+
+  <script src="/assets/gallery.js"></script>
+</body>
+</html>
