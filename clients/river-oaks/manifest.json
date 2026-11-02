@@ -4,7 +4,7 @@
       "id": "clip-01",
       "type": "video",
       "title": "Clip 01",
-      "duration": 5.11,
+      "duration": 5.04,
       "orientation": "portrait",
       "width": 2160,
       "height": 3840,
@@ -12,8 +12,8 @@
       "sourceStart": 0.0,
       "sourceEnd": 14.514,
       "fullFile": "clip-01.mp4",
-      "preview": "/media/river-oaks/clip-01.mp4?v=1f",
-      "poster": "/media/river-oaks/clip-01.jpg?v=1f",
+      "preview": "/media/river-oaks/clip-01.mp4?v=2",
+      "poster": "/media/river-oaks/clip-01.jpg?v=2",
       "sourceFrames": [
         0,
         435
@@ -126,8 +126,8 @@
       "sourceStart": 47.648,
       "sourceEnd": 51.952,
       "fullFile": "clip-07.mp4",
-      "preview": "/media/river-oaks/clip-07.mp4?v=1",
-      "poster": "/media/river-oaks/clip-07.jpg?v=1",
+      "preview": "/media/river-oaks/clip-07.mp4?v=2",
+      "poster": "/media/river-oaks/clip-07.jpg?v=2",
       "sourceFrames": [
         1428,
         1557
@@ -243,7 +243,7 @@
       "height": 3072,
       "source": "DJI_20261101055335_0086_D.JPG",
       "fullFile": "photo-03.jpg",
-      "preview": "/media/river-oaks/photo-03.jpg?v=1"
+      "preview": "/media/river-oaks/photo-03.jpg?v=2"
     },
     {
       "id": "photo-04",
