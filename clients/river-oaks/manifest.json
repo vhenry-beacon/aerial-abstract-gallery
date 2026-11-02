@@ -971,7 +971,7 @@
       "type": "video",
       "title": "Ground clip 3",
       "category": "ground",
-      "duration": 6.24,
+      "duration": 6.01,
       "orientation": "portrait",
       "width": 1728,
       "height": 3072,
@@ -984,15 +984,17 @@
         187
       ],
       "fullFile": "ground-03.mp4",
-      "preview": "/media/river-oaks/ground-03.mp4",
-      "poster": "/media/river-oaks/ground-03.jpg"
+      "preview": "/media/river-oaks/ground-03.mp4?v=1",
+      "poster": "/media/river-oaks/ground-03.jpg?v=1",
+      "origPreview": "/media/river-oaks/ground-03.orig.mp4",
+      "origPoster": "/media/river-oaks/ground-03.orig.jpg"
     },
     {
       "id": "ground-04",
       "type": "video",
       "title": "Ground clip 4",
       "category": "ground",
-      "duration": 12.98,
+      "duration": 11.61,
       "orientation": "landscape",
       "width": 3840,
       "height": 2160,
@@ -1005,8 +1007,10 @@
         824
       ],
       "fullFile": "ground-04.mp4",
-      "preview": "/media/river-oaks/ground-04.mp4",
-      "poster": "/media/river-oaks/ground-04.jpg"
+      "preview": "/media/river-oaks/ground-04.mp4?v=1",
+      "poster": "/media/river-oaks/ground-04.jpg?v=1",
+      "origPreview": "/media/river-oaks/ground-04.orig.mp4",
+      "origPoster": "/media/river-oaks/ground-04.orig.jpg"
     },
     {
       "id": "ground-05",
@@ -1202,7 +1206,7 @@
       "type": "video",
       "title": "Ground clip 14",
       "category": "ground",
-      "duration": 12.97,
+      "duration": 12.22,
       "orientation": "portrait",
       "width": 1080,
       "height": 1920,
@@ -1215,8 +1219,10 @@
         503
       ],
       "fullFile": "ground-14.mp4",
-      "preview": "/media/river-oaks/ground-14.mp4",
-      "poster": "/media/river-oaks/ground-14.jpg"
+      "preview": "/media/river-oaks/ground-14.mp4?v=1",
+      "poster": "/media/river-oaks/ground-14.jpg?v=1",
+      "origPreview": "/media/river-oaks/ground-14.orig.mp4",
+      "origPoster": "/media/river-oaks/ground-14.orig.jpg"
     },
     {
       "id": "ground-15",
@@ -1391,7 +1397,7 @@
       "type": "video",
       "title": "Ground clip 23",
       "category": "ground",
-      "duration": 12.97,
+      "duration": 7.02,
       "orientation": "portrait",
       "width": 1080,
       "height": 1920,
@@ -1404,8 +1410,10 @@
         683
       ],
       "fullFile": "ground-23.mp4",
-      "preview": "/media/river-oaks/ground-23.mp4",
-      "poster": "/media/river-oaks/ground-23.jpg"
+      "preview": "/media/river-oaks/ground-23.mp4?v=1",
+      "poster": "/media/river-oaks/ground-23.jpg?v=1",
+      "origPreview": "/media/river-oaks/ground-23.orig.mp4",
+      "origPoster": "/media/river-oaks/ground-23.orig.jpg"
     },
     {
       "id": "ground-24",
