@@ -9,7 +9,8 @@ name). Existing items keep their ids, approvals, edits, notes and purchases. New
   vertical drone video  -> clip-NN   "Clip 12"         horizontal drone video -> wide-NN   "Wide clip 3"
   ground (Osmo) video   -> ground-NN "Ground clip 2"   photos -> photo-NN "Aerial photo 18" / "Ground photo 4"
 Ground vs drone: a folder or file name containing "osmo" or "ground" means ground; "drone"/"aerial" means drone.
-Photos without a hint use process_photos.classify (DJI 4:3 = aerial); videos without a hint count as drone footage.
+Photos without a hint use process_photos.classify (DJI 4:3 = aerial); videos without a hint are ground when the
+camera labels itself an Osmo, otherwise drone footage.
 
 House look: the color look Keri applied most in the studio (per videos / photos, at least twice) is applied to
 the new items as a normal studio edit, so she can still change it or go back to the original. --look / --photo-look
@@ -20,7 +21,9 @@ run options:
   --skip TEXT         leave out new files whose path contains TEXT; they're remembered and not offered again
   --pick "FILE=a-b,c-d"  hand-picked clip ranges (seconds) for one video instead of the automatic scene cuts;
                       repeat for more videos. Use it for long unedited footage (plan warns about those).
+  --ground TEXT       treat new videos whose path contains TEXT as ground footage (no folder hint or camera label)
   --min/--max         automatic clip length range in seconds (default 10-15)
+  --raw-dir DIR       reuse raw files already downloaded to DIR (same name and size) instead of downloading again
   --no-deploy         stop after making the files (for testing); otherwise deploys, uploads, applies the look,
                       deploys again and commits locally, updating the status card on Keri's project page.
 Written Nov 2, 2026.
@@ -48,6 +51,13 @@ def hint(path):
     if "drone" in p or "aerial" in p:
         return "aerial"
     return None
+
+
+def camera_hint(src):
+    """The camera's own label: Osmo Pocket files say encoder "DJI OsmoPocket3", so they're ground footage."""
+    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format_tags=encoder", "-of", "default=nw=1:nk=1", src],
+                         capture_output=True, text=True).stdout
+    return "ground" if "osmo" in out.lower() else None
 
 
 def new_raw_files(r2, pid, man):
@@ -102,6 +112,8 @@ def main():
     ap.add_argument("--max", type=float, default=15)
     ap.add_argument("--look")
     ap.add_argument("--photo-look")
+    ap.add_argument("--ground", action="append", default=[])
+    ap.add_argument("--raw-dir")
     ap.add_argument("--no-deploy", action="store_true")
     a = ap.parse_args()
 
@@ -110,6 +122,13 @@ def main():
     slug = a.slug or proj.get("gallerySlug")
     if not slug:
         sys.exit(f"{a.id} has no gallery yet; build it first (docs/SOP.md), then add to it")
+    def fetch(f, dest):
+        local = os.path.join(a.raw_dir, os.path.basename(f["rel"])) if a.raw_dir else None
+        if local and os.path.exists(local) and os.path.getsize(local) == f["size"]:
+            os.symlink(local, dest)
+        else:
+            r2.get(f["key"], dest)
+
     status = lambda state, text="": psite.call("POST", "/api/admin/project", {"id": a.id, "claude": True, "state": state, "stateText": text}, slug=False)
     man_path = studio.manifest_path(slug)
     man = json.load(open(man_path))
@@ -153,7 +172,7 @@ def main():
             for f in photos:
                 src = os.path.join(td, "raw", f["rel"])
                 os.makedirs(os.path.dirname(src), exist_ok=True)
-                r2.get(f["key"], src)
+                fetch(f, src)
                 im = ImageOps.exif_transpose(Image.open(src)).convert("RGB")
                 loaded.append((hint(f["rel"]) or classify(src, im), f, src, im))
             loaded.sort(key=lambda t: (t[0] != "aerial", t[1]["rel"]))
@@ -172,10 +191,10 @@ def main():
             src = os.path.join(td, "raw", f["rel"])
             os.makedirs(os.path.dirname(src), exist_ok=True)
             status("working", f"Cutting clips from {os.path.basename(f['rel'])}")
-            r2.get(f["key"], src)
+            fetch(f, src)
             info = probe(src)
             portrait = info["h"] > info["w"]
-            kind = hint(f["rel"]) or "aerial"
+            kind = ("ground" if any(g.lower() in f["rel"].lower() for g in a.ground) else None) or hint(f["rel"]) or camera_hint(src) or "aerial"
             prefix, word = ("ground", "Ground clip") if kind == "ground" else ("clip", "Clip") if portrait else ("wide", "Wide clip")
             name = os.path.basename(f["rel"])
             segs = picks.get(name) or plan_segments(scene_cuts(src, 0.30), info["dur"], a.min, a.max)
