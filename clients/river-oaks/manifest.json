@@ -126,8 +126,8 @@
       "sourceStart": 47.648,
       "sourceEnd": 51.952,
       "fullFile": "clip-07.mp4",
-      "preview": "/media/river-oaks/clip-07.mp4?v=0f",
-      "poster": "/media/river-oaks/clip-07.jpg?v=0f",
+      "preview": "/media/river-oaks/clip-07.mp4?v=1",
+      "poster": "/media/river-oaks/clip-07.jpg?v=1",
       "sourceFrames": [
         1428,
         1557
@@ -243,7 +243,7 @@
       "height": 3072,
       "source": "DJI_20261101055335_0086_D.JPG",
       "fullFile": "photo-03.jpg",
-      "preview": "/media/river-oaks/photo-03.jpg"
+      "preview": "/media/river-oaks/photo-03.jpg?v=1"
     },
     {
       "id": "photo-04",
