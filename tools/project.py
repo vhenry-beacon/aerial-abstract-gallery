@@ -5,10 +5,13 @@
   project.py show --id smith-wedding                # quote, instructions, Keri's note, uploaded files
   project.py fetch --id smith-wedding --to DIR      # download the raw files (delete DIR when done)
   project.py scaffold --id smith-wedding [--slug S] # clients/<slug>/client.json from the quote + a new access code
-  project.py upload-full --slug S --dir DIR         # full-quality files (clip-01.mp4, photo-01.jpg…) → R2, marked ready
+  project.py upload-full --slug S --dir DIR [--id P] # full-quality files (clip-01.mp4, photo-01.jpg…) → R2, marked ready
   project.py link --id smith-wedding --slug S       # after deploying: show the gallery on the project page
   project.py note --id smith-wedding --text "…"     # a note from Claude on the project page
+  project.py status --id smith-wedding --state working --text "Cutting the clips"   # the status card Keri sees
+                                                    # (states: working, problem, waiting; link sets "ready")
 
+fetch, scaffold and upload-full update the status card themselves ("working" + the step).
 Typical build: show → fetch → process_photos.py / process_clips.py (see docs/SOP.md) → scaffold →
 build_manifest.py → upload-full → deploy → link. Keri then reviews in the studio and publishes.
 """
@@ -64,6 +67,7 @@ def cmd_show(a):
 
 
 def cmd_fetch(a):
+    set_status(a.id, "working", "Downloading your files to Vernon's Mac")
     r2 = studio.R2()
     files = r2.list(f"raw/{a.id}/")
     for f in files:
@@ -78,6 +82,7 @@ def cmd_fetch(a):
 
 
 def cmd_scaffold(a):
+    set_status(a.id, "working", "Setting up the client gallery")
     s = site()
     p = project(s, a.id)
     slug = a.slug or p["id"]
@@ -113,6 +118,8 @@ def cmd_scaffold(a):
 
 
 def cmd_upload_full(a):
+    if a.id:
+        set_status(a.id, "working", "Uploading the finished full-quality files")
     s, r2 = studio.Site(a.slug, by="Claude"), studio.R2()
     for name in sorted(os.listdir(a.dir)):
         if name.startswith("."):
@@ -131,6 +138,15 @@ def cmd_link(a):
     studio.log(f"{a.id} now shows gallery {a.slug}")
 
 
+def set_status(pid, state, text=""):
+    call(site(), "POST", "/api/admin/project", {"id": pid, "claude": True, "state": state, "stateText": text})
+
+
+def cmd_status(a):
+    set_status(a.id, a.state, a.text or "")
+    studio.log(f"{a.id}: {a.state}{' (' + a.text + ')' if a.text else ''}")
+
+
 def cmd_note(a):
     call(site(), "POST", "/api/admin/project", {"id": a.id, "claude": True, "claudeNote": a.text})
     studio.log("note posted")
@@ -138,7 +154,8 @@ def cmd_note(a):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["list", "show", "fetch", "scaffold", "upload-full", "link", "note"])
+    ap.add_argument("cmd", choices=["list", "show", "fetch", "scaffold", "upload-full", "link", "note", "status"])
+    ap.add_argument("--state", choices=["working", "problem", "waiting"], default="working")
     ap.add_argument("--id")
     ap.add_argument("--slug")
     ap.add_argument("--to")
@@ -147,7 +164,7 @@ def main():
     ap.add_argument("--force", action="store_true")
     a = ap.parse_args()
     {"list": cmd_list, "show": cmd_show, "fetch": cmd_fetch, "scaffold": cmd_scaffold,
-     "upload-full": cmd_upload_full, "link": cmd_link, "note": cmd_note}[a.cmd](a)
+     "upload-full": cmd_upload_full, "link": cmd_link, "note": cmd_note, "status": cmd_status}[a.cmd](a)
 
 
 if __name__ == "__main__":

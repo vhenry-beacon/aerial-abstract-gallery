@@ -1,0 +1,43 @@
+{
+  "items": [
+    {
+      "id": "mashup-01",
+      "type": "video",
+      "title": "Mashup 1: Festival Energy",
+      "duration": 18.52,
+      "orientation": "portrait",
+      "width": 2160,
+      "height": 3840,
+      "source": "VerticalSocialMediaEDITED.mp4",
+      "fullFile": "mashup-01.mp4",
+      "preview": "/media/new-test-project/mashup-01.mp4",
+      "poster": "/media/new-test-project/mashup-01.jpg"
+    },
+    {
+      "id": "mashup-02",
+      "type": "video",
+      "title": "Mashup 2: Faces and Fun",
+      "duration": 19.52,
+      "orientation": "portrait",
+      "width": 2160,
+      "height": 3840,
+      "source": "VerticalSocialMediaEDITED.mp4",
+      "fullFile": "mashup-02.mp4",
+      "preview": "/media/new-test-project/mashup-02.mp4",
+      "poster": "/media/new-test-project/mashup-02.jpg"
+    },
+    {
+      "id": "mashup-03",
+      "type": "video",
+      "title": "Mashup 3: Golden Hour",
+      "duration": 19.52,
+      "orientation": "portrait",
+      "width": 2160,
+      "height": 3840,
+      "source": "VerticalSocialMediaEDITED.mp4",
+      "fullFile": "mashup-03.mp4",
+      "preview": "/media/new-test-project/mashup-03.mp4",
+      "poster": "/media/new-test-project/mashup-03.jpg"
+    }
+  ]
+}

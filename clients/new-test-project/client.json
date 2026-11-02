@@ -1,0 +1,26 @@
+{
+  "slug": "new-test-project",
+  "clientName": "Fernon Hernon",
+  "eventName": "Super Fun Time",
+  "eventDate": "2026-11-01",
+  "contactName": "Fernon Hernon",
+  "contactEmail": "vernonhenry@gmail.com",
+  "accessCodeHash": "3f905c4e4f59432bec90a6fb3653bc8569738eea8fd94ce0f81b83429a53c465",
+  "welcome": "Thank you for having Aerial Abstract at your Super Fun Time. Pick the 0 photos and clips included in your 500 package. Need more? Add extras for $20 each.",
+  "provider": {
+    "name": "Aerial Abstract",
+    "person": "Keri Henry",
+    "email": "kerifhenry@gmail.com",
+    "phone": "(713) 705-4798",
+    "website": "https://aerial-abstract.com",
+    "instagram": "@aerialabstract713"
+  },
+  "package": {
+    "name": "500",
+    "price": 0,
+    "included": 0,
+    "paidOffline": false
+  },
+  "extraPrice": 2000,
+  "upsells": []
+}

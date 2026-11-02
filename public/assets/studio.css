@@ -141,6 +141,12 @@ table.t { width: 100%; border-collapse: collapse; font-size: 13px; background: v
 .pill.pj-quote { background: var(--line); color: var(--ink-2); }
 .pill.pj-files { background: #3a6fb0; color: #fff; }
 .pill.pj-claude { background: #6b5bd2; color: #fff; }
+.pj-cstate { border: 1px solid var(--line); border-left: 4px solid #6b5bd2; border-radius: 12px; padding: 10px 14px; margin: 0 0 12px; background: var(--surface); }
+.pj-cstate > b { display: block; font-size: 15px; margin-bottom: 2px; }
+.pj-cstate p { margin: 4px 0; }
+.pj-cstate.waiting { border-left-color: var(--gold); }
+.pj-cstate.ready { border-left-color: #2f9e62; }
+.pj-cstate.problem { border-left-color: #d64545; }
 .pill.pj-reviewing { background: var(--gold); color: #fff; }
 .pill.pj-published, .pill.pj-paid { background: var(--accent); color: var(--accent-ink); }
 .pj-dlg { border: 0; border-radius: var(--radius); padding: 20px; width: min(420px, calc(100% - 32px)); background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }

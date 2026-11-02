@@ -83,13 +83,17 @@
       list: $("upList"), overall: $("upOverall"), cloud: $("cloudFiles"), cloudSum: $("cloudSum"),
       onList: (files) => { if (files.length && !P.hasFiles) { P.hasFiles = true; refreshStatus(); } },
     });
+    // keep the Claude status card current while the page is open
+    setInterval(() => { if (!document.hidden && JSON.stringify(formData()) === saved) refreshStatus(); }, 60000);
   }
   async function refreshStatus() {
     const r = await api(`/api/admin/project?id=${encodeURIComponent(id)}`);
     if (r.ok) { P = { ...P, ...r.body.project }; renderHead(r.body.worker); renderClaude(); }
   }
 
+  let W = null; // last auto-editor check-in, shown in the Claude status card
   function renderHead(worker) {
+    if (worker !== undefined) W = worker;
     document.title = `${P.name} · Aerial Abstract`;
     $("pjName").textContent = P.name;
     const g = P.gallerySlug;
@@ -99,9 +103,10 @@
     const at = STEPS.indexOf(P.status);
     $("steps").innerHTML = STEPS.map((s, k) => `<li class="${k < at ? "done" : k === at ? "now" : ""}">${LABEL[s]}</li>`).join("");
     const c = P.counts;
-    $("banner").innerHTML = c && (c.waiting || c.notes) ? `<div class="st-banner">
+    const top = P.claudeState?.state === "ready" ? "" : claudeStatus(); // the Claude card is the first thing Keri sees
+    $("banner").innerHTML = top + (c && (c.waiting || c.notes) ? `<div class="st-banner">
       ${c.waiting ? `<div><b>⏳ ${c.waiting} edit${c.waiting === 1 ? "" : "s"} queued</b> for the auto-editor. ${workerLine(worker)}</div>` : ""}
-      ${c.notes ? `<div><b>💬 ${c.notes} note${c.notes === 1 ? "" : "s"} for Claude.</b> Tell Vernon, or ask Claude: “Keri left notes.”</div>` : ""}</div>` : "";
+      ${c.notes ? `<div><b>💬 ${c.notes} note${c.notes === 1 ? "" : "s"} for Claude.</b> Tell Vernon, or ask Claude: “Keri left notes.”</div>` : ""}</div>` : "");
   }
 
   // quote form
@@ -158,17 +163,37 @@
     window.addEventListener("beforeunload", (e) => { if (P && JSON.stringify(formData()) !== saved) { e.preventDefault(); e.returnValue = ""; } });
   }
 
+  // Where the hand-off stands, in plain words, so Keri never has to ask Vernon.
+  // Claude works in a session on Vernon's Mac; the Mac checks every 15 minutes and alerts Vernon about new requests.
+  function claudeStatus() {
+    const s = P.claudeState || (P.sentToClaudeAt ? { state: "waiting", at: P.sentToClaudeAt } : null);
+    if (!s) return "";
+    const macOff = !W || Date.now() - new Date(W.at) > 40 * 60000;
+    const card = (icon, cls, title, body) => `<div class="pj-cstate ${cls}"><b>${icon} ${title}</b>${body}</div>`;
+    if (s.state === "working") return card("🛠", "working", "Claude is working on this", `<p>${esc(s.text || "Cutting and editing your files.")} <span class="st-muted">(updated ${ago(s.at)})</span></p>
+      <p class="st-muted st-small">When it's done, the gallery appears here and in the review studio. Nothing for you to do yet.</p>`);
+    if (s.state === "problem") return card("⚠️", "problem", "Claude needs you", `<p>${esc(s.text || "Claude has a question; see its note below.")}</p>
+      <p class="st-muted st-small">Change the quote, instructions or files as needed, then press Send to Claude again.</p>`);
+    if (s.state === "ready") return P.gallerySlug ? card("✅", "ready", "Ready for your review", `<p>Claude finished ${ago(s.at)}. Open the review studio to check each item.</p>`) : "";
+    const waited = Date.now() - new Date(P.sentToClaudeAt || s.at);
+    const alerted = s.macAlertedAt ? `Vernon's Mac alerted him ${ago(s.macAlertedAt)}.` : macOff
+      ? `<b>Vernon's Mac hasn't checked in ${W ? "since " + new Date(W.at).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }) : "yet"}</b>, so it hasn't seen this. It needs to be on and awake.`
+      : "Vernon's Mac will alert him within 15 minutes.";
+    return card("⏳", "waiting", "Waiting for Claude to start", `<p>Sent ${ago(P.sentToClaudeAt || s.at)}. ${alerted}</p>
+      <p class="st-muted st-small">Claude starts when Vernon opens it on his Mac. This card changes to "working" as soon as it does.</p>
+      ${waited > 2 * 3600000 ? `<p><b>It's been over 2 hours.</b> Text Vernon: “Projects are waiting for Claude.”</p>` : ""}`);
+  }
+
   // hand-off to Claude, and what came back
   function renderClaude() {
     const notes = (P.claudeNotes || []).map((n) => `<div class="st-note claude"><div class="who"><span>Claude · ${new Date(n.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span></div>${esc(n.text)}</div>`).join("");
     const gallery = P.gallerySlug ? `<p><b>Client gallery:</b> <a href="/g/${encodeURIComponent(P.gallerySlug)}" target="_blank">${esc(location.origin)}/g/${esc(P.gallerySlug)}</a>
       ${P.accessCode ? `<br><b>Access code:</b> <code>${esc(P.accessCode)}</code>` : ""}</p>
       <p class="st-muted st-small">Review everything in the studio and publish when it's ready. Then send the client the link and code.</p>` : "";
-    const sent = P.sentToClaudeAt ? `<p>Sent to Claude ${ago(P.sentToClaudeAt)}.${P.gallerySlug ? "" : " Claude will build the gallery from your quote, instructions and files, then it shows up here."}</p>` : "";
-    $("claudeBox").innerHTML = `${gallery}${sent}${notes ? `<div class="st-notes">${notes}</div>` : ""}
+    $("claudeBox").innerHTML = `${P.claudeState?.state === "ready" ? claudeStatus() : ""}${gallery}${notes ? `<div class="st-notes">${notes}</div>` : ""}
       ${P.gallerySlug ? "" : `<textarea class="field" id="sendNote" placeholder="Anything else Claude should know (optional)"></textarea>
       <button class="btn" id="sendBtn" type="button">${P.sentToClaudeAt ? "Send to Claude again" : "Send to Claude"}</button>
-      <p class="st-muted st-small">Claude reads the quote, the instructions and the files, then cuts the clips, edits the photos and builds the client gallery. Tell Vernon it's ready, or ask Claude directly.</p>`}`;
+      <p class="st-muted st-small">Claude reads the quote, the instructions and the files, then cuts the clips, edits the photos and builds the client gallery. The card above shows where it stands.</p>`}`;
     const b = $("sendBtn");
     if (b) b.onclick = async () => {
       if (JSON.stringify(formData()) !== saved && !(await saveProject())) return;

@@ -9,6 +9,7 @@ import {
   editWaiting, reelWaiting, noteWaiting, getProject, saveProject, listProjects, PROJECT_STATUSES, getWorker, setWorker,
 } from "../../lib/core.mjs";
 
+const CLAUDE_STATES = ["waiting", "working", "ready", "problem"];
 const bad = (msg: string, status = 400) => json({ error: msg }, { status });
 
 function publicClient(c: any) {
@@ -134,7 +135,10 @@ async function projectSummary(p: any, rawFolders: Set<string>) {
     };
   } else if (p.sentToClaudeAt) status = "claude";
   else if (rawFolders.has(p.id)) status = "files";
-  return { ...p, accessCode: undefined, status, statusLabel: PROJECT_STATUSES[status as keyof typeof PROJECT_STATUSES], cover, counts, hasFiles: rawFolders.has(p.id) };
+  // "With Claude" tiles say which part: waiting to be picked up, working, or stuck on a question for Keri
+  const cs = status === "claude" ? p.claudeState?.state : null;
+  const label = PROJECT_STATUSES[(cs && cs !== "ready" ? cs : status) as keyof typeof PROJECT_STATUSES];
+  return { ...p, accessCode: undefined, status, statusLabel: label, cover, counts, hasFiles: rawFolders.has(p.id) };
 }
 async function rawProjectFolders() {
   if (!r2()) return new Set<string>();
@@ -392,12 +396,16 @@ export default async (req: Request, context: Context) => {
         if (b.id) {
           p = await getProject(projectName(b.id));
           if (!p) return bad("Project not found", 404);
-          if (b.send) { p.sentToClaudeAt = at; p.sentNote = str(b.sentNote, 2000); }
+          if (b.send) { p.sentToClaudeAt = at; p.sentNote = str(b.sentNote, 2000); p.claudeState = { state: "waiting", text: "", at }; }
           else if (b.claude) {
             // tools/project.py: link the finished gallery and record its access code for Keri
             if (b.gallerySlug) { if (!getClient(b.gallerySlug)) return bad("That gallery isn't deployed yet"); p.gallerySlug = b.gallerySlug; }
             if (b.accessCode) p.accessCode = str(b.accessCode, 40);
             if (b.claudeNote) (p.claudeNotes ||= []).push({ text: str(b.claudeNote, 2000), at });
+            // what Keri sees at the top of the project: waiting → working (with the current step) → ready, or problem
+            const state = b.gallerySlug ? "ready" : CLAUDE_STATES.includes(b.state) ? b.state : null;
+            if (state) p.claudeState = { state, text: str(b.stateText, 300), at };
+            if (b.macAlerted) p.claudeState = { ...(p.claudeState || { state: "waiting" }), macAlertedAt: at };
           } else p = cleanProject(b, p);
         } else {
           const name = str(b.name, 120);

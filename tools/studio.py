@@ -490,6 +490,18 @@ def cmd_status(site):
             print(f"   {n['by']}: {t}{n['text']}")
 
 
+def alert_new_projects(site):
+    """Keri pressed "Send to Claude": pop up a notification on this Mac (once per send) and tell her page it was seen."""
+    for p in site.call("GET", "/api/admin/projects", slug=False)["projects"]:
+        cs = p.get("claudeState") or {}
+        if p.get("status") != "claude" or cs.get("state", "waiting") != "waiting" or cs.get("macAlertedAt"):
+            continue
+        msg = f"Keri sent \"{p['name']}\" to Claude. Open Claude and say: work on Keri's waiting projects."
+        subprocess.run(["osascript", "-e", f"display notification {json.dumps(msg)} with title \"Aerial Abstract\" sound name \"Glass\""])
+        site.call("POST", "/api/admin/project", {"id": p["id"], "claude": True, "macAlerted": True}, slug=False)
+        log(f"alerted Vernon: {p['id']} is waiting for Claude")
+
+
 def cmd_auto():
     """Background job (tools/autorender.sh, every 15 min): render every gallery's waiting requests, publish, report."""
     import fcntl, socket
@@ -528,6 +540,10 @@ def cmd_auto():
     except (SystemExit, Exception) as e:  # studio.py helpers exit on errors; report them instead of dying silently
         error = str(e) or repr(e)
         log(f"error: {error}")
+    try:
+        alert_new_projects(site or Site(slugs[0], by="Auto-editor"))
+    except BaseException as e:
+        log(f"couldn't check for new projects: {e}")
     finally:
         try:
             (site or Site(slugs[0], by="Auto-editor")).call("POST", "/api/admin/worker",
