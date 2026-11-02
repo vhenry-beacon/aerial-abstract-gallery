@@ -122,7 +122,13 @@ window.RawUploader = (opts) => {
       if (r.ok) for (const p of r.body.parts) have[p.n] = p; else uploadId = null;
     }
     if (!uploadId) {
-      const s = await api("/api/admin/raw/start", { path: x.path, size: f.size, type: f.type, replace: !!x.replace });
+      let s = await api("/api/admin/raw/start", { path: x.path, size: f.size, type: f.type, replace: !!x.replace });
+      if (s.ok && s.body.renamed && !s.body.done) {
+        // the cloud copy is locked; this goes up as a new copy beside it
+        x.path = s.body.renamed; x.replace = false;
+        x.row.querySelector(".name").textContent = x.path;
+        s = await api("/api/admin/raw/start", { path: x.path, size: f.size, type: f.type });
+      }
       if (!s.ok) throw new Error(s.body.error || "couldn't start");
       if (s.body.done) { x.done = f.size; return show(x, "already there", 100); }
       if (s.body.url) {

@@ -33,11 +33,14 @@ window.DriveCheck = ({ project, input, out, reupload }) => {
     }
     return false;
   }
-  function findCloud(cloud, rel, size) {
+  // cloud files that could be this local file: same path, a "(new copy N)" of it, same path under another
+  // top folder, or the same name and size; it's safe if any of them matches byte for byte
+  const copyOf = (p) => p.replace(/ \(new copy(?: \d+)?\)(\.[^./]*)?$/, "$1");
+  function candidates(cloud, rel, size) {
     const name = rel.split("/").pop();
-    return cloud.find((c) => c.path === rel)
-      || cloud.find((c) => c.size === size && (rel.endsWith("/" + c.path) || c.path.endsWith("/" + rel)))
-      || (() => { const same = cloud.filter((c) => c.size === size && c.path.split("/").pop() === name); return same.length === 1 ? same[0] : null; })();
+    const same = (c) => c.size === size && (copyOf(c.path) === rel || rel.endsWith("/" + copyOf(c.path)) || copyOf(c.path).endsWith("/" + rel));
+    const out = cloud.filter(same);
+    return out.length ? out : cloud.filter((c) => c.size === size && copyOf(c.path).split("/").pop() === name);
   }
 
   input.addEventListener("change", async () => {
@@ -54,11 +57,14 @@ window.DriveCheck = ({ project, input, out, reupload }) => {
     for (const [k, f] of local.entries()) {
       const rel = f.webkitRelativePath || f.name;
       out.innerHTML = `<p>Checking ${k + 1} of ${local.length}: ${esc(rel)}</p><div class="st-bar"><span style="width:${(done / total) * 100}%"></span></div>`;
-      const c = findCloud(cloud, rel, f.size);
-      const before = done;
-      if (!c) { missing.push(rel); redo.push({ file: f, path: rel }); }
-      else if (c.etag && await matches(f, c.etag, (n) => { done += n; out.querySelector(".st-bar span").style.width = `${(Math.min(done, total) / total) * 100}%`; })) ok.push(rel);
-      else { differ.push(rel); redo.push({ file: f, path: c.path }); }
+      const cs = candidates(cloud, rel, f.size), before = done;
+      const tick = (n) => { done += n; out.querySelector(".st-bar span").style.width = `${(Math.min(done, total) / total) * 100}%`; };
+      let good = false;
+      for (const c of cs) if (c.etag && await matches(f, c.etag, tick)) { good = true; break; }
+      const named = cloud.find((c) => c.path === rel || rel.endsWith("/" + c.path));
+      if (good) ok.push(rel);
+      else if (!cs.length && !named) { missing.push(rel); redo.push({ file: f, path: rel }); }
+      else { differ.push(rel); redo.push({ file: f, path: (named || cs[0]).path }); }
       done = before + f.size;
     }
     const list = (xs) => `<ul class="pj-checklist">${xs.slice(0, 50).map((x) => `<li>${esc(x)}</li>`).join("")}${xs.length > 50 ? `<li>…and ${xs.length - 50} more</li>` : ""}</ul>`;
@@ -69,7 +75,7 @@ window.DriveCheck = ({ project, input, out, reupload }) => {
       + (missing.length ? `<p><b>Not in the cloud (${missing.length}):</b></p>${list(missing)}` : "")
       + (differ.length ? `<p><b>Different from the cloud copy (${differ.length}):</b> the upload may have been cut off.</p>${list(differ)}` : "")
       + (redo.length ? `<button class="btn" type="button" id="dcRedo">Upload these ${redo.length} again</button>
-        <p class="st-muted st-small">After they finish, run the check again.</p>` : "");
+        <p class="st-muted st-small">${differ.length ? "Cloud copies are locked for 90 days as a safety net, so a different file goes up as a new copy beside the old one (“name (new copy).ext”). " : ""}After they finish, run the check again.</p>` : "");
     const b = out.querySelector("#dcRedo");
     if (b) b.onclick = () => { reupload(redo, true); b.disabled = true; b.textContent = "Uploading… (see the list above)"; };
   });

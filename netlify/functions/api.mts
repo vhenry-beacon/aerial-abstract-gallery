@@ -351,6 +351,18 @@ export default async (req: Request, context: Context) => {
           const size = Number(body.size) || 0;
           const existing = await r2Head(key);
           if (existing && existing.size === size && !body.replace) return json({ key, done: true });
+          if (existing && (body.replace || existing.size !== size)) {
+            // raw/ has a 90-day delete lock (R2 bucket lock rule raw-uploads-90-days), so a file can't be replaced:
+            // upload it beside the old one as "name (new copy N).ext"
+            const dot = path.lastIndexOf("."), stem = dot > 0 ? path.slice(0, dot) : path, ext = dot > 0 ? path.slice(dot) : "";
+            for (let n = 1; n < 50; n++) {
+              const alt = `${stem} (new copy${n > 1 ? " " + n : ""})${ext}`;
+              const there = await r2Head(prefix + alt);
+              if (!there) return json({ renamed: alt });
+              if (there.size === size) return json({ key: prefix + alt, done: true, renamed: alt });
+            }
+            return bad("Too many copies of this file already");
+          }
           if (size <= 64 * 1024 * 1024) return json({ key, url: await r2Presign("PUT", key, 3600) });
           return json({ key, uploadId: await r2MultipartStart(key, body.type) });
         }
