@@ -83,6 +83,7 @@
       list: $("upList"), overall: $("upOverall"), cloud: $("cloudFiles"), cloudSum: $("cloudSum"),
       onList: (files) => { if (files.length && !P.hasFiles) { P.hasFiles = true; refreshStatus(); } },
     });
+    loadDocs();
     window.DriveCheck({ project: P.id, input: $("checkDrive"), out: $("checkOut"), reupload: uploader.add });
     // keep the Claude status card current while the page is open
     setInterval(() => { if (!document.hidden && JSON.stringify(formData()) === saved) refreshStatus(); }, 60000);
@@ -162,6 +163,41 @@
     });
     $("save").onclick = saveProject;
     window.addEventListener("beforeunload", (e) => { if (P && JSON.stringify(formData()) !== saved) { e.preventDefault(); e.returnValue = ""; } });
+  }
+
+  // ---- documents the client received (docs/<project>/ in the cloud) ----
+  const mbs = (b) => (b >= 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1e3))} KB`);
+  async function loadDocs() {
+    const r = await api(`/api/admin/docs/list?project=${encodeURIComponent(P.id)}`);
+    const files = (r.ok && r.body.files) || [];
+    $("docList").innerHTML = files.length ? files.map((f) => `<div class="pj-doc"><span>📄 ${esc(f.name)} <span class="st-muted st-small">${mbs(f.size)}</span></span>
+      <span><button class="btn ghost small" data-docopen="${esc(f.name)}" type="button">Open</button>
+      <button class="btn ghost small" data-docdel="${esc(f.name)}" type="button" aria-label="Remove">✕</button></span></div>`).join("")
+      : `<p class="st-muted st-small">No documents yet.</p>`;
+  }
+  if (!isHome) {
+    $("docPick").addEventListener("change", async (e) => {
+      const files = [...e.target.files]; e.target.value = "";
+      for (const [k, f] of files.entries()) {
+        $("docStatus").textContent = `Uploading ${k + 1} of ${files.length}: ${f.name}…`;
+        const u = await api("/api/admin/docs/upload", { project: P.id, name: f.name, size: f.size });
+        if (!u.ok) { $("docStatus").textContent = u.body.error || "Upload failed"; return; }
+        const res = await fetch(u.body.url, { method: "PUT", body: f });
+        if (!res.ok) { $("docStatus").textContent = `Upload failed for ${f.name}. Try again.`; return; }
+      }
+      $("docStatus").textContent = files.length ? `Added ${files.length} document${files.length === 1 ? "" : "s"}.` : "";
+      loadDocs();
+    });
+    $("docList").addEventListener("click", async (e) => {
+      const o = e.target.closest("[data-docopen]"), d = e.target.closest("[data-docdel]");
+      if (o) {
+        const r = await api(`/api/admin/docs/url?project=${encodeURIComponent(P.id)}&name=${encodeURIComponent(o.dataset.docopen)}`);
+        if (r.ok) window.open(r.body.url, "_blank"); else alert(r.body.error);
+      } else if (d && confirm(`Remove ${d.dataset.docdel}?`)) {
+        await api("/api/admin/docs/delete", { project: P.id, name: d.dataset.docdel });
+        loadDocs();
+      }
+    });
   }
 
   // Where the hand-off stands, in plain words, so Keri never has to ask Vernon.

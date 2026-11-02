@@ -3,6 +3,7 @@
 
   project.py list                                   # every project, its status, and whether it was sent to Claude
   project.py show --id smith-wedding                # quote, instructions, Keri's note, uploaded files
+  project.py docs --id smith-wedding --to DIR       # the documents the client received (read them with the quote)
   project.py fetch --id smith-wedding --to DIR      # download the raw files (delete DIR when done)
   project.py scaffold --id smith-wedding [--slug S] # clients/<slug>/client.json from the quote + a new access code
   project.py upload-full --slug S --dir DIR [--id P] # full-quality files (clip-01.mp4, photo-01.jpg…) → R2, marked ready
@@ -60,6 +61,10 @@ def cmd_show(a):
     print(f"\nInstructions for Claude:\n{p.get('instructions') or '(none)'}")
     if p.get("sentNote"):
         print(f"\nKeri's note when sending: {p['sentNote']}")
+    docs = studio.R2().list(f"docs/{a.id}/")
+    print(f"\nDocuments the client received ({len(docs)}){': read them with project.py docs' if docs else ''}:")
+    for f in docs:
+        print(f"   {f['key'][len(f'docs/{a.id}/'):]}  {f['size'] / 1e6:.1f} MB")
     files = studio.R2().list(f"raw/{a.id}/")
     print(f"\nFiles ({len(files)}, {sum(f['size'] for f in files) / 1e9:.2f} GB):")
     for f in files:
@@ -79,6 +84,18 @@ def cmd_fetch(a):
         studio.log(f"   {rel} ({f['size'] / 1e6:.1f} MB)")
         r2.get(f["key"], dest)
     studio.log(f"{len(files)} files in {a.to}. Delete the folder once the gallery is built.")
+
+
+def cmd_docs(a):
+    """Download the quote documents (agreement, rate sheet, shot list) to read alongside the quote."""
+    r2 = studio.R2()
+    files = r2.list(f"docs/{a.id}/")
+    os.makedirs(a.to, exist_ok=True)
+    for f in files:
+        dest = os.path.join(a.to, f["key"][len(f"docs/{a.id}/"):])
+        r2.get(f["key"], dest)
+        studio.log(f"   {dest}")
+    studio.log(f"{len(files)} document(s). Every deliverable they promise must be in the gallery or flagged to Keri.")
 
 
 def cmd_scaffold(a):
@@ -154,7 +171,7 @@ def cmd_note(a):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["list", "show", "fetch", "scaffold", "upload-full", "link", "note", "status"])
+    ap.add_argument("cmd", choices=["list", "show", "fetch", "scaffold", "upload-full", "link", "note", "status", "docs"])
     ap.add_argument("--state", choices=["working", "problem", "waiting"], default="working")
     ap.add_argument("--id")
     ap.add_argument("--slug")
@@ -164,7 +181,7 @@ def main():
     ap.add_argument("--force", action="store_true")
     a = ap.parse_args()
     {"list": cmd_list, "show": cmd_show, "fetch": cmd_fetch, "scaffold": cmd_scaffold,
-     "upload-full": cmd_upload_full, "link": cmd_link, "note": cmd_note, "status": cmd_status}[a.cmd](a)
+     "upload-full": cmd_upload_full, "link": cmd_link, "note": cmd_note, "status": cmd_status, "docs": cmd_docs}[a.cmd](a)
 
 
 if __name__ == "__main__":

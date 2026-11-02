@@ -284,6 +284,21 @@ def render_photo(src, edit, out, prev_jpg):
     pv.save(prev_jpg, "JPEG", quality=72, progressive=True)
 
 
+def ensure_orig_preview(src, it, m, media):
+    """Untouched watermarked preview (<id>.orig.mp4/.jpg) so the studio shows edits on the true original."""
+    if m.get("origPreview"):
+        return
+    base = os.path.join(media, f"{it['id']}.orig")
+    if it["type"] == "video":
+        video_preview(src, probe(src), base + ".mp4", base + ".jpg")
+        m["origPreview"], m["origPoster"] = f"/media/{os.path.basename(media)}/{it['id']}.orig.mp4", f"/media/{os.path.basename(media)}/{it['id']}.orig.jpg"
+    else:
+        with tempfile.TemporaryDirectory() as td:
+            render_photo(src, None, os.path.join(td, "x.jpg"), base + ".jpg")
+        m["origPreview"] = f"/media/{os.path.basename(media)}/{it['id']}.orig.jpg"
+    log(f"   kept an untouched preview: {it['id']}.orig")
+
+
 def render_items(site, r2, data, ids, cache, announce=True):
     """announce=False (house look on newly added items): record the render without marking them revised or adding a note."""
     review, items = data["review"], {i["id"]: i for i in data["items"]}
@@ -295,6 +310,7 @@ def render_items(site, r2, data, ids, cache, announce=True):
         edit, version = rv.get("edit"), (rv.get("version") or 0) + 1
         log(f"{iid}: {describe(edit, it)}")
         src = ensure_original(r2, site.slug, iid, cache)
+        ensure_orig_preview(src, it, next(m for m in man["items"] if m["id"] == iid), media)
         ext, ctype = ("mp4", "video/mp4") if it["type"] == "video" else ("jpg", "image/jpeg")
         out = os.path.join(cache["_dir"], f"{iid}.out.{ext}")
         original = describe(edit, it) in ("back to the original", "no visible change")
@@ -560,7 +576,7 @@ def cmd_auto():
 def main():
     global SITE
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["status", "render", "set", "reply", "auto"])
+    ap.add_argument("cmd", choices=["status", "render", "set", "reply", "auto", "origs"])
     ap.add_argument("--slug")
     ap.add_argument("--site", default=SITE)
     ap.add_argument("--ids", default="")
@@ -585,6 +601,20 @@ def main():
         site.post(body)
         return log("note posted")
     data = site.review()
+    if a.cmd == "origs":  # one-time backfill: untouched previews for items edited before Nov 2, 2026
+        man = json.load(open(manifest_path(a.slug)))
+        media = os.path.join(ROOT, "public", "media", a.slug)
+        r2 = R2()
+        with tempfile.TemporaryDirectory() as td:
+            for m in man["items"]:
+                rv = data["review"]["items"].get(m["id"]) or {}
+                if m.get("upsellOnly") or m.get("origPreview") or not (rv.get("rendered") or {}).get("edit"):
+                    continue
+                if not r2.head(f"orig/{a.slug}/{m['id']}"):
+                    continue
+                ensure_orig_preview(ensure_original(r2, a.slug, m["id"], {"_dir": td}), m, m, media)
+        json.dump(man, open(manifest_path(a.slug), "w"), indent=2)
+        return log("Next: npm run build, deploy, and commit.")
     if a.cmd == "set":
         cur = (data["review"]["items"].get(a.id) or {}).get("edit") or {}
         edit = {"look": cur.get("look"), "speed": cur.get("speed", 1), "trim": cur.get("trim")}

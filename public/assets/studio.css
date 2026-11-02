@@ -17,6 +17,9 @@ h3 { font-size: 15px; margin: 18px 0 8px; }
 .st-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .st-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 18px; align-items: start; }
 .st-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; max-height: calc(100vh - 170px); overflow: auto; padding: 2px; }
+.st-undo-all { margin-left: auto; }
+.st-sec { grid-column: 1 / -1; margin: 8px 0 0; font-size: 15px; }
+.st-subsec { grid-column: 1 / -1; font-size: 12px; color: var(--ink-3); margin-top: 4px; text-transform: uppercase; letter-spacing: .04em; }
 .st-thumb { position: relative; border: 0; padding: 0; border-radius: 10px; overflow: hidden; background: #0d0f10; aspect-ratio: 1; outline: 3px solid transparent; outline-offset: -3px; }
 .st-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .st-thumb.on { outline-color: var(--ink); }
@@ -142,6 +145,8 @@ table.t { width: 100%; border-collapse: collapse; font-size: 13px; background: v
 .pill.pj-files { background: #3a6fb0; color: #fff; }
 .pill.pj-claude { background: #6b5bd2; color: #fff; }
 .pj-sub { font-size: 15px; margin: 14px 0 6px; }
+.pj-docs { margin: 6px 0 8px; }
+.pj-doc { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 .pj-drivecheck { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 12px; }
 .pj-drivecheck p { margin: 4px 0 8px; }
 .pj-checklist { margin: 4px 0 10px; padding-left: 18px; font-size: 13px; max-height: 180px; overflow: auto; }

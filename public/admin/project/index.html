@@ -57,6 +57,11 @@
             <button class="btn ghost small" id="addAddon" type="button">+ Add-on</button>
             <h3>Quote details</h3>
             <textarea class="field pj-text" data-k="quote.description" placeholder="Everything you promised the client: what's included, shot list, delivery formats, turnaround…"></textarea>
+            <h3>Documents the client received</h3>
+            <p class="st-muted st-small">The signed quote, agreement, rate sheet, shot list: anything that tells the client what they're getting. Claude reads these with the quote and makes sure every promised deliverable is in the gallery.</p>
+            <div id="docList" class="pj-docs"></div>
+            <label class="btn ghost small">+ Add documents<input type="file" id="docPick" multiple hidden accept=".pdf,.doc,.docx,.txt,.rtf,.pages,.jpg,.jpeg,.png,.heic,.xlsx,.csv"></label>
+            <span class="st-small" id="docStatus"></span>
           </section>
 
           <section class="pj-card">

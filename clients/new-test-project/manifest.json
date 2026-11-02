@@ -50,7 +50,8 @@
       "source": "DJI_20261031190638_0030_D.JPG",
       "fullFile": "photo-01.jpg",
       "rawKey": "Drone Photos/DJI_20261031190638_0030_D.JPG",
-      "preview": "/media/new-test-project/photo-01.jpg?v=1"
+      "preview": "/media/new-test-project/photo-01.jpg?v=2",
+      "origPreview": "/media/new-test-project/photo-01.orig.jpg"
     },
     {
       "id": "photo-02",
@@ -63,7 +64,8 @@
       "source": "DJI_20261101053506_0061_D.JPG",
       "fullFile": "photo-02.jpg",
       "rawKey": "Drone Photos/DJI_20261101053506_0061_D.JPG",
-      "preview": "/media/new-test-project/photo-02.jpg?v=1"
+      "preview": "/media/new-test-project/photo-02.jpg?v=1",
+      "origPreview": "/media/new-test-project/photo-02.orig.jpg"
     },
     {
       "id": "photo-03",
@@ -76,7 +78,8 @@
       "source": "DJI_20261101071224_0149_D.JPG",
       "fullFile": "photo-03.jpg",
       "rawKey": "Drone Photos/DJI_20261101071224_0149_D.JPG",
-      "preview": "/media/new-test-project/photo-03.jpg?v=1"
+      "preview": "/media/new-test-project/photo-03.jpg?v=1",
+      "origPreview": "/media/new-test-project/photo-03.orig.jpg"
     },
     {
       "id": "photo-04",
@@ -89,7 +92,8 @@
       "source": "IMG_4363.HEIC",
       "fullFile": "photo-04.jpg",
       "rawKey": "Osmo Ground/IMG_4363.HEIC",
-      "preview": "/media/new-test-project/photo-04.jpg?v=1"
+      "preview": "/media/new-test-project/photo-04.jpg?v=1",
+      "origPreview": "/media/new-test-project/photo-04.orig.jpg"
     },
     {
       "id": "photo-05",
@@ -102,7 +106,8 @@
       "source": "IMG_4365.HEIC",
       "fullFile": "photo-05.jpg",
       "rawKey": "Osmo Ground/IMG_4365.HEIC",
-      "preview": "/media/new-test-project/photo-05.jpg?v=1"
+      "preview": "/media/new-test-project/photo-05.jpg?v=1",
+      "origPreview": "/media/new-test-project/photo-05.orig.jpg"
     },
     {
       "id": "clip-01",
@@ -123,7 +128,9 @@
       ],
       "fullFile": "clip-01.mp4",
       "preview": "/media/new-test-project/clip-01.mp4?v=1",
-      "poster": "/media/new-test-project/clip-01.jpg?v=1"
+      "poster": "/media/new-test-project/clip-01.jpg?v=1",
+      "origPreview": "/media/new-test-project/clip-01.orig.mp4",
+      "origPoster": "/media/new-test-project/clip-01.orig.jpg"
     },
     {
       "id": "photo-06",
@@ -136,7 +143,8 @@
       "source": "DJI_20261101072830_0164_D.JPG",
       "fullFile": "photo-06.jpg",
       "rawKey": "Batch 3/DJI_20261101072830_0164_D.JPG",
-      "preview": "/media/new-test-project/photo-06.jpg?v=1"
+      "preview": "/media/new-test-project/photo-06.jpg?v=1",
+      "origPreview": "/media/new-test-project/photo-06.orig.jpg"
     }
   ],
   "rawSkipped": []

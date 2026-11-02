@@ -3,7 +3,7 @@ import {
   getClient, listClients, getState, saveState, quote, fulfillOrder, saveOrder, getOrder, listOrders,
   json, signToken, cookieName, setCookieHeader, isClientAuthed, isAdmin, checkAdminPassword, sha256Hex,
   fileStore, PART_SIZE, stripe, stripeKey, verifyStripeSignature, siteUrl,
-  r2, r2Key, r2Presign, r2Head, storageMode, downloadName, zipName,
+  r2, r2Key, r2Presign, r2Head, r2Delete, storageMode, downloadName, zipName,
   r2List, r2MultipartStart, r2PartUrl, r2MultipartParts, r2MultipartComplete, r2MultipartAbort,
   getReview, saveReview, clientCanSee, REVIEW_STATUSES,
   editWaiting, reelWaiting, noteWaiting, getProject, saveProject, listProjects, PROJECT_STATUSES, getWorker, setWorker,
@@ -321,6 +321,30 @@ export default async (req: Request, context: Context) => {
           stripeMode: stripeKey()?.startsWith("sk_live") ? "live" : stripeKey() ? "test" : "off",
           storage: storageMode(),
         });
+      }
+
+      // ---- quote documents: what the client was given (agreement, rate sheet, shot list), under docs/<project>/.
+      // Separate from raw/ so they're never mistaken for footage, and Keri can remove them (no delete lock here).
+      if (route.startsWith("admin/docs/")) {
+        if (!r2()) return bad("R2 storage isn't configured");
+        const body: any = m === "POST" ? await readJson(req) : {};
+        const project = projectName(url.searchParams.get("project") || body.project);
+        if (!project) return bad("Missing project");
+        const prefix = `docs/${project}/`;
+        if (route === "admin/docs/list" && m === "GET") {
+          const { files } = await r2List(prefix);
+          return json({ files: files.map((f: any) => ({ name: f.key.slice(prefix.length), size: f.size, modified: f.modified })) });
+        }
+        const name = safePath(body.name || url.searchParams.get("name")).split("/").pop() || "";
+        if (!name) return bad("Missing file name");
+        if (route === "admin/docs/upload" && m === "POST") {
+          if (Number(body.size) > 200 * 1024 * 1024) return bad("That file is over 200 MB; upload it with the shoot files instead");
+          return json({ url: await r2Presign("PUT", prefix + name, 3600) });
+        }
+        if (route === "admin/docs/url" && m === "GET")
+          return json({ url: await r2Presign("GET", prefix + name, 3600, { "response-content-disposition": `inline; filename="${name.replace(/"/g, "")}"` }) });
+        if (route === "admin/docs/delete" && m === "POST") return json({ ok: await r2Delete(prefix + name) });
+        return bad("Not found", 404);
       }
 
       // ---- raw uploads: whole shoots go straight to Cloudflare R2 under raw/<project>/ ----

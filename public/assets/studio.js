@@ -147,7 +147,9 @@
   }
   const pill = (r, waiting) => { const x = shown(r, waiting); return `<span class="pill ${x.cls}">${x.text}</span>`; };
   const item = (id) => D.items.find((i) => i.id === id);
-  const thumbOf = (i) => (i.type === "video" ? i.poster : i.preview) || "";
+  // the untouched preview when there is one (tools/studio.py keeps <id>.orig.* once an item has been edited),
+  // so the look shown in the studio is applied to the true original, not on top of an earlier edit
+  const thumbOf = (i) => (i.type === "video" ? i.origPoster || i.poster : i.origPreview || i.preview) || "";
   const blankEdit = (i) => ({ look: { preset: "original", brightness: 0, contrast: 0, saturation: 0, warmth: 0, fade: 0 }, ...(i.type === "video" ? { speed: 1, trim: null } : {}) });
   const editOf = (id) => {
     const blank = blankEdit(item(id)), e = clone(rev(id).edit);
@@ -160,10 +162,13 @@
     for (const s of Object.keys(STATUS)) counts[s] = items.filter((i) => rev(i.id).status === s).length;
     counts.queued = items.filter((i) => editWaiting(rev(i.id))).length;
     const order = ["all", "queued", "new", "edits", "revised", "approved", "remove"];
+    const edited = items.filter((i) => rev(i.id).edit || rev(i.id).rendered?.edit).length;
     $("filters").innerHTML = order.filter((k) => k === "all" || counts[k])
-      .map((k) => `<button class="st-chip ${filter === k ? "on" : ""}" data-f="${k}" type="button">${k === "all" ? "All" : k === "queued" ? "⏳ Edit queued" : STATUS[k]} · ${counts[k]}</button>`).join("");
+      .map((k) => `<button class="st-chip ${filter === k ? "on" : ""}" data-f="${k}" type="button">${k === "all" ? "All" : k === "queued" ? "⏳ Edit queued" : STATUS[k]} · ${counts[k]}</button>`).join("")
+      + (edited ? `<button class="st-chip st-undo-all" id="undoAll" type="button">↺ Undo all edits (${edited})</button>` : "");
     const list = items.filter((i) => filter === "all" || (filter === "queued" ? editWaiting(rev(i.id)) : rev(i.id).status === filter));
-    $("grid").innerHTML = list.map((i) => {
+    // grouped like the client gallery: Videos, then Pictures, each split into sections (sections.js)
+    const thumb = (i) => {
       const r = rev(i.id);
       const userNotes = r.notes.filter((n) => n.by === "Keri").length;
       return `<button class="st-thumb ${i.id === curId ? "on" : ""}" data-id="${esc(i.id)}" type="button">
@@ -171,9 +176,30 @@
         ${pill(r, editWaiting(r))}
         ${userNotes ? `<span class="notes">💬 ${userNotes}</span>` : ""}
         <span class="lbl">${esc(i.title)}${i.duration ? ` · ${secs(i.duration)}` : ""}</span></button>`;
-    }).join("") || `<p class="empty">Nothing here.</p>`;
+    };
+    const part = (title, xs) => {
+      if (!xs.length) return "";
+      const gs = Sections.groups(xs);
+      return `<h3 class="st-sec">${title} · ${xs.length}</h3>` + gs.map((g) =>
+        `${gs.length > 1 ? `<div class="st-subsec">${g.label} · ${g.items.length}</div>` : ""}${g.items.map(thumb).join("")}`).join("");
+    };
+    $("grid").innerHTML = part("Videos", list.filter((i) => i.type === "video")) + part("Pictures", list.filter((i) => i.type !== "video"))
+      || `<p class="empty">Nothing here.</p>`;
   }
-  $("filters").addEventListener("click", (e) => { const b = e.target.closest("[data-f]"); if (b) { filter = b.dataset.f; renderItems(); } });
+  $("filters").addEventListener("click", async (e) => {
+    if (e.target.closest("#undoAll")) return undoAll();
+    const b = e.target.closest("[data-f]"); if (b) { filter = b.dataset.f; renderItems(); }
+  });
+  // every photo and clip back to its original (the reel is separate); approvals and notes stay
+  async function undoAll() {
+    const ids = D.items.filter((i) => !i.upsellOnly && (rev(i.id).edit || rev(i.id).rendered?.edit)).map((i) => i.id);
+    if (!ids.length || !confirm(`Undo the edits on all ${ids.length} edited photos and clips and go back to the originals? Approvals and notes stay as they are.`)) return;
+    let ok = 0;
+    for (const id of ids) if (await save({ id, edit: null })) ok++;
+    if (curId) draft = editOf(curId);
+    renderItems(); if (curId) renderEditor();
+    toast(`${ok} item${ok === 1 ? "" : "s"} going back to the original. The final files are restored within 15 minutes.`, 5000);
+  }
   $("grid").addEventListener("click", (e) => {
     const b = e.target.closest(".st-thumb"); if (!b) return;
     if (curId && curId !== b.dataset.id && !same(draft, editOf(curId)) && !confirm("You have unsaved changes on this item. Leave without saving?")) return;
@@ -197,8 +223,8 @@
     const userNote = video ? `<label class="st-small"><input type="checkbox" id="noteAtTime" checked> at <span id="noteTime">0:00</span></label>` : "";
     $("editor").innerHTML = `
       <div class="st-media">
-        ${video ? `<video id="edMedia" src="${esc(i.preview)}" poster="${esc(i.poster || "")}" autoplay muted loop playsinline controls controlslist="nodownload noplaybackrate" disablepictureinpicture></video>`
-                : `<img id="edMedia" src="${esc(i.preview)}" alt="">`}
+        ${video ? `<video id="edMedia" src="${esc(i.origPreview || i.preview)}" poster="${esc(i.origPoster || i.poster || "")}" autoplay muted loop playsinline controls controlslist="nodownload noplaybackrate" disablepictureinpicture></video>`
+                : `<img id="edMedia" src="${esc(i.origPreview || i.preview)}" alt="">`}
         <button class="st-compare" id="compare" type="button">Hold to see original</button>
       </div>
       <div class="st-ed-head">
@@ -221,7 +247,7 @@
       <textarea class="field" id="noteText" placeholder="${video ? "e.g. Cut before the car drives in, or hold the last shot longer" : "e.g. Straighten the horizon, or brighten the faces"}"></textarea>
       <div class="st-note-row">${userNote}<button class="btn ghost small" id="addNote" type="button">Add note</button></div>
       <div class="st-save-row"><span class="st-small" id="dirty"></span>
-        <button class="btn ghost small" id="resetEdit" type="button">Reset</button>
+        ${r.edit || r.rendered?.edit ? `<button class="btn ghost small" id="toOriginal" type="button" title="Undo every edit on this item">↺ Back to original</button>` : ""}
         <button class="btn" id="saveEdit" type="button">Save edit request</button></div>`;
     renderLooks(); renderSliders(); renderNotes();
     if (video) { renderSpeeds(); renderTrim(); }
@@ -322,8 +348,11 @@
       const text = $("noteText").value.trim(); if (!text) return $("noteText").focus();
       const at = m?.tagName === "VIDEO" && $("noteAtTime")?.checked ? m.currentTime : null;
       if (await save({ id: curId, note: { text, t: at } }, "Note saved")) { $("noteText").value = ""; renderNotes(); renderItems(); refreshStatusPill(); }
-    } else if (t.id === "resetEdit") {
-      draft = blankEdit(item(curId)); renderEditor();
+    } else if (t.id === "toOriginal") {
+      if (!confirm("Undo every edit on this item and go back to the original?")) return;
+      if (await save({ id: curId, edit: null }, rev(curId).rendered?.edit ? "Going back to the original. The final file is restored within 15 minutes." : "Edit request cleared")) {
+        draft = editOf(curId); renderItems(); renderEditor();
+      }
     } else if (t.id === "saveEdit") {
       const isBlank = same(draft, blankEdit(item(curId)));
       if (await save({ id: curId, edit: isBlank ? null : draft }, isBlank ? "Edit request cleared" : "Edit request saved. Claude will make the final version.")) {

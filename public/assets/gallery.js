@@ -100,29 +100,19 @@
     $("howExtra").textContent = `Want more? Every pick beyond ${c.package.included} is ${money(c.extraPrice)}.`;
   }
 
-  // Sections, in display order. Ground = Osmo/handheld footage; the rest is from the drone.
-  const GROUPS = [
-    ["vertical", "Vertical clips", "9:16", "clips"], ["wide", "Horizontal clips", "16:9", "wide"], ["ground", "Ground clips", "", "clips"],
-    ["aerial", "Aerial photos", "", "photos"], ["groundPhoto", "Ground photos", "", "photos"],
-  ];
-  const groupOf = (it) => it.type === "photo" ? (it.category === "ground" ? "groundPhoto" : "aerial")
-    : it.category === "ground" ? "ground" : it.orientation === "landscape" ? "wide" : "vertical";
-  const rank = Object.fromEntries(GROUPS.map((g, k) => [g[0], k]));
-  // manifest order within each section; sections in GROUPS order (the lightbox follows the same order)
-  const ordered = (list) => list.map((it, k) => [it, k]).sort((a, b) => rank[groupOf(a[0])] - rank[groupOf(b[0])] || a[1] - b[1]).map((x) => x[0]);
+  const ordered = Sections.sort;
   const items = () => ordered(data.items.filter((i) => !i.upsellOnly));
-  // fill a section with one grid per kind; a subheading only when the section holds more than one kind
+  // fill Videos or Pictures with one grid per section (Sections.js); a subheading only when there's more than one
   function fillGroups(box, list) {
-    const used = GROUPS.filter((g) => list.some((it) => groupOf(it) === g[0]));
-    box.replaceChildren(...used.flatMap(([key, label, shape, cls]) => {
-      const these = list.filter((it) => groupOf(it) === key);
+    const gs = Sections.groups(list);
+    box.replaceChildren(...gs.flatMap((g) => {
       const grid = document.createElement("div");
-      grid.className = `grid ${cls}`;
-      grid.replaceChildren(...these.map(card));
-      if (used.length < 2) return [grid];
+      grid.className = `grid ${g.key.startsWith("video") ? (g.vertical ? "clips" : "wide") : g.vertical ? "photos tall" : "photos"}`;
+      grid.replaceChildren(...g.items.map(card));
+      if (gs.length < 2) return [grid];
       const h = document.createElement("div");
       h.className = "sub-h";
-      h.innerHTML = `<b>${label}</b><span>${these.length}${shape ? " · " + shape : ""}</span>`;
+      h.innerHTML = `<b>${g.label}</b><span>${g.items.length}</span>`;
       return [h, grid];
     }));
   }
@@ -208,7 +198,7 @@
     document.querySelectorAll(".tab").forEach((t) => {
       const k = t.dataset.tab;
       t.setAttribute("aria-selected", String(k === tab));
-      const base = { all: "Everything", clips: "Clips", photos: "Photos", picked: "My picks", owned: "My files" }[k];
+      const base = { all: "Everything", clips: "Videos", photos: "Pictures", picked: "My picks", owned: "My files" }[k];
       t.textContent = counts[k] ? `${base} (${counts[k]})` : base;
     });
 
@@ -221,9 +211,8 @@
     const vc = visible(clips), vp = visible(photos);
     fillGroups($("clipsGrid"), vc);
     fillGroups($("photosGrid"), vp);
-    const shapes = new Set(vc.map((i) => i.orientation === "landscape" ? "16:9 horizontal" : "9:16 vertical"));
-    $("clipsCount").textContent = `${vc.length} clip${vc.length === 1 ? "" : "s"}${shapes.size === 1 ? " · " + [...shapes][0] : ""}`;
-    $("photosCount").textContent = `${vp.length} photo${vp.length === 1 ? "" : "s"}`;
+    $("clipsCount").textContent = `${vc.length} video${vc.length === 1 ? "" : "s"}`;
+    $("photosCount").textContent = `${vp.length} picture${vp.length === 1 ? "" : "s"}`;
     $("clipsSection").classList.toggle("hidden", tab === "owned" || !showClips || !vc.length);
     $("photosSection").classList.toggle("hidden", tab === "owned" || !showPhotos || !vp.length);
     $("ownedPanel").classList.toggle("hidden", tab !== "owned");
