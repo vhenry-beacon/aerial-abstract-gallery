@@ -12,9 +12,8 @@ Ground vs drone: a folder or file name containing "osmo" or "ground" means groun
 Photos without a hint use process_photos.classify (DJI 4:3 = aerial); videos without a hint are ground when the
 camera labels itself an Osmo, otherwise drone footage.
 
-House look: the color look Keri applied most in the studio (per videos / photos, at least twice) is applied to
-the new items as a normal studio edit, so she can still change it or go back to the original. --look / --photo-look
-set it by hand (a preset name, or "none").
+Color: new items arrive exactly as uploaded (no look, no brightness change; Vernon's call, Nov 2, 2026). Only when
+asked, --look / --photo-look apply a preset to them as a normal studio edit, so Keri can still go back to the original.
 
 run options:
   --only TEXT         use only new files whose path contains TEXT (e.g. a folder name)
@@ -90,15 +89,6 @@ def title_count(man, word):
     return sum(1 for i in man["items"] if i["type"] == "photo" and i.get("category", "aerial") == word)
 
 
-def house_look(review, man, kind):
-    types = {i["id"]: i["type"] for i in man["items"]}
-    looks = collections.Counter(((r.get("edit") or {}).get("look") or {}).get("preset") for iid, r in review["items"].items()
-                                if types.get(iid) == kind)
-    looks.pop(None, None)
-    looks.pop("original", None)
-    best = looks.most_common(1)
-    return best[0][0] if best and best[0][1] >= 2 else None
-
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -133,13 +123,11 @@ def main():
     man_path = studio.manifest_path(slug)
     man = json.load(open(man_path))
     site, r2 = studio.Site(slug, by="Claude"), studio.R2()
-    review = site.review()["review"]
 
     files, ignored = new_raw_files(r2, a.id, man)
     skipped = [f["rel"] for f in files if any(s.lower() in f["rel"].lower() for s in a.skip)]
     files = [f for f in files if f["rel"] not in skipped and a.only.lower() in f["rel"].lower()]
-    vlook = a.look if a.look else house_look(review, man, "video")
-    plook = a.photo_look if a.photo_look else house_look(review, man, "photo")
+    vlook, plook = a.look, a.photo_look
     vlook, plook = (None if x == "none" else x for x in (vlook, plook))
     picks = {}
     for p in a.pick:
@@ -150,7 +138,7 @@ def main():
                f"{f', {len(ignored)} ignored (split pieces, our own deliveries, other files)' if ignored else ''}")
     for f in files:
         studio.log(f"   {f['type']:5s} {f['size'] / 1e6:8.1f} MB  {f['rel']}  [{hint(f['rel']) or 'no folder hint'}]")
-    studio.log(f"   house look: videos {vlook or 'none'}, photos {plook or 'none'}")
+    studio.log(f"   look: videos {vlook or 'as uploaded'}, photos {plook or 'as uploaded'}")
     if a.cmd == "plan" or not files:
         if not files:
             studio.log("Nothing new to add.")
@@ -238,7 +226,7 @@ def main():
             r2.put(f"full/{slug}/{it['id']}", os.path.join(full_dir, it["fullFile"]), ctype)
             site.call("POST", "/api/admin/upload-done", {"id": it["id"], "name": it["fullFile"], "type": ctype})
 
-    # ---- house look, as a normal studio edit (Keri can change it or go back to the original)
+    # ---- a look only when asked, as a normal studio edit (Keri can change it or go back to the original)
     looked = []
     for it in new_items:
         preset = vlook if it["type"] == "video" else plook
@@ -255,7 +243,7 @@ def main():
     kinds = collections.Counter(i["title"].rsplit(" ", 1)[0].lower() for i in new_items)
     summary = ", ".join(f"{n} {k}{'s' if n > 1 else ''}" for k, n in kinds.items())
     text = (f"Added {summary} from your new uploads"
-            + (f", with the {vlook or plook} look" + ("" if a.look or a.photo_look else " you've been using") if looked else "")
+            + (f", with the {vlook or plook} look" if looked else "")
             + ". They're in the review studio, not reviewed yet. Everything you already approved is unchanged.")
     psite.call("POST", "/api/admin/project", {"id": a.id, "claude": True, "state": "ready", "claudeNote": text}, slug=False)
     studio.log(text)
