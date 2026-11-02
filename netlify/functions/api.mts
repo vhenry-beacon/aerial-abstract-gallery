@@ -5,11 +5,21 @@ import {
   fileStore, PART_SIZE, stripe, stripeKey, verifyStripeSignature, siteUrl,
   r2, r2Key, r2Presign, r2Head, r2Delete, storageMode, downloadName, zipName,
   r2List, r2MultipartStart, r2PartUrl, r2MultipartParts, r2MultipartComplete, r2MultipartAbort,
-  getReview, saveReview, clientCanSee, REVIEW_STATUSES,
+  getReview, saveReview, clientCanSee, REVIEW_STATUSES, REEL_FORMATS, withReels,
   editWaiting, reelWaiting, noteWaiting, getProject, saveProject, listProjects, PROJECT_STATUSES, getWorker, setWorker,
 } from "../../lib/core.mjs";
 
 const CLAUDE_STATES = ["waiting", "working", "ready", "problem"];
+
+// A gallery as its client sees it: the deployed config plus the highlight reels Keri approved and priced
+// (prices come from the project page, so changing one needs no deploy).
+async function liveClient(slug: any) {
+  const client = getClient(slug);
+  if (!client || !client.items.some((i: any) => i.reel)) return client;
+  const [review, projects] = await Promise.all([getReview(client.slug), listProjects()]);
+  const project = projects.find((p: any) => p.gallerySlug === client.slug);
+  return withReels(client, review, project?.quote?.reelPrices || {});
+}
 const bad = (msg: string, status = 400) => json({ error: msg }, { status });
 
 function publicClient(c: any) {
@@ -18,7 +28,8 @@ function publicClient(c: any) {
     welcome: c.welcome, provider: c.provider,
     package: { name: c.package.name, price: c.package.price, included: c.package.included },
     extraPrice: c.extraPrice,
-    upsells: (c.upsells || []).map((u: any) => ({ id: u.id, name: u.name, price: u.price, description: u.description, preview: u.preview, poster: u.poster, unlocks: u.unlocks })),
+    upsells: (c.upsells || []).map((u: any) => ({ id: u.id, name: u.name, price: u.price, description: u.description, preview: u.preview, poster: u.poster, unlocks: u.unlocks,
+      group: u.group || null, orientation: u.orientation || "portrait" })),
   };
 }
 
@@ -112,6 +123,8 @@ function cleanProject(b: any, prev: any = {}) {
       addons: (Array.isArray(q.addons) ? q.addons : []).slice(0, 10)
         .map((a: any) => ({ name: str(a.name, 80), price: cents(a.price), description: str(a.description, 400) }))
         .filter((a: any) => a.name),
+      // highlight reel prices in cents; a missing or 0 price means that reel isn't offered
+      reelPrices: Object.fromEntries(REEL_FORMATS.map((f: any) => [f.id, cents(q.reelPrices?.[f.id])]).filter(([, v]: any) => v > 0)),
     },
     instructions: str(b.instructions, 8000),
   };
@@ -171,7 +184,7 @@ export default async (req: Request, context: Context) => {
     }
 
     if (route === "gallery" && m === "GET") {
-      const client = getClient(url.searchParams.get("slug"));
+      const client = await liveClient(url.searchParams.get("slug"));
       if (!client) return bad("Gallery not found", 404);
       if (!(await isClientAuthed(req, client.slug))) {
         return json({ needsLogin: true, client: { clientName: client.clientName, eventName: client.eventName, provider: client.provider } }, { status: 401 });
@@ -185,7 +198,7 @@ export default async (req: Request, context: Context) => {
 
     if (route === "select" && m === "POST") {
       const { slug, id, upsell, on } = await readJson(req);
-      const client = getClient(slug);
+      const client = await liveClient(slug);
       if (!client) return bad("Gallery not found", 404);
       if (!(await isClientAuthed(req, slug))) return bad("Please sign in", 401);
       const state = await getState(client);
@@ -210,7 +223,7 @@ export default async (req: Request, context: Context) => {
 
     if (route === "checkout" && m === "POST") {
       const { slug, email } = await readJson(req);
-      const client = getClient(slug);
+      const client = await liveClient(slug);
       if (!client) return bad("Gallery not found", 404);
       if (!(await isClientAuthed(req, slug))) return bad("Please sign in", 401);
       const state = await getState(client);
@@ -218,7 +231,7 @@ export default async (req: Request, context: Context) => {
       if (!q.cart.length && !q.comp.length && !q.upsells.length && !q.packageIncluded) return bad("Your cart is empty");
       const order: any = {
         id: crypto.randomUUID(), slug, createdAt: new Date().toISOString(), status: "pending",
-        lines: q.lines, total: q.total, assign: q.assign, comp: q.comp, upsells: q.upsells, packageIncluded: q.packageIncluded,
+        lines: q.lines, total: q.total, assign: q.assign, comp: q.comp, upsells: q.upsells, unlocks: q.unlocks, packageIncluded: q.packageIncluded,
       };
       if (q.total === 0) {
         // Package already paid and picks fit inside the remaining included slots (or only complimentary items): no charge.
@@ -273,7 +286,7 @@ export default async (req: Request, context: Context) => {
 
     if (route === "confirm" && m === "GET") {
       const slug = url.searchParams.get("slug")!;
-      const client = getClient(slug);
+      const client = await liveClient(slug);
       const order = client && (await getOrder(slug, url.searchParams.get("order")!));
       const sid = url.searchParams.get("session_id");
       if (!client || !order || !sid || order.stripeSessionId !== sid) return Response.redirect(`${siteUrl(req)}/g/${slug}?error=1`, 302);
@@ -294,7 +307,7 @@ export default async (req: Request, context: Context) => {
       const evt = JSON.parse(raw);
       if (evt.type === "checkout.session.completed" || evt.type === "checkout.session.async_payment_succeeded") {
         const s = evt.data.object;
-        const client = getClient(s.metadata?.slug);
+        const client = await liveClient(s.metadata?.slug);
         const order = client && (await getOrder(client.slug, s.metadata?.orderId));
         if (client && order && s.payment_status === "paid" && order.stripeSessionId === s.id) {
           order.amountPaid = s.amount_total;
@@ -424,7 +437,14 @@ export default async (req: Request, context: Context) => {
         const p = await getProject(projectName(url.searchParams.get("id")));
         if (!p) return bad("Project not found", 404);
         const summary = await projectSummary(p, await rawProjectFolders());
-        return json({ project: { ...summary, accessCode: p.accessCode || null }, worker: await getWorker() });
+        // the reel formats with, for this project's gallery, whether each reel is made and approved
+        const g = p.gallerySlug ? getClient(p.gallerySlug) : null;
+        const rv = g ? await getReview(g.slug) : null;
+        const reels = REEL_FORMATS.map((f: any) => {
+          const it = g?.items.find((i: any) => i.reel === f.id);
+          return { ...f, made: !!it, status: it ? rv?.items[it.id]?.status || "new" : null };
+        });
+        return json({ project: { ...summary, accessCode: p.accessCode || null }, reels, worker: await getWorker() });
       }
       if (route === "admin/project" && m === "POST") {
         const b: any = await readJson(req);
@@ -591,10 +611,11 @@ export default async (req: Request, context: Context) => {
         else if (action === "revoke" && id) delete state.purchased[id];
         else if (action === "mark-cart-paid") {
           // Client paid outside the site (PayPal, check): fulfill the current cart as a manual order.
-          const q = quote(client, state, await getReview(slug));
-          const order: any = { id: crypto.randomUUID(), slug, createdAt: at, status: "pending", lines: q.lines, total: q.total, assign: q.assign, comp: q.comp, upsells: q.upsells, packageIncluded: q.packageIncluded };
+          const live = await liveClient(slug);
+          const q = quote(live, state, await getReview(slug));
+          const order: any = { id: crypto.randomUUID(), slug, createdAt: at, status: "pending", lines: q.lines, total: q.total, assign: q.assign, comp: q.comp, upsells: q.upsells, unlocks: q.unlocks, packageIncluded: q.packageIncluded };
           await saveOrder(order);
-          await fulfillOrder(client, order, "manual");
+          await fulfillOrder(live, order, "manual");
           return json({ ok: true });
         } else return bad("Unknown action");
         state.selected = state.selected.filter((x: string) => !state.purchased[x]);

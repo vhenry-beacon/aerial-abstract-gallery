@@ -73,6 +73,7 @@ textarea.field { min-height: 64px; resize: vertical; margin-bottom: 6px; }
 .st-reel-player { position: sticky; top: 10px; }
 .st-frame { position: relative; background: #000; border-radius: 12px; overflow: hidden; aspect-ratio: 9/16; max-height: 72vh; margin: 0 auto; }
 .st-frame video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.st-frame video.st-reel-buf { position: absolute; inset: 0; }
 .st-title-overlay { position: absolute; left: 0; right: 0; top: 38%; text-align: center; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,.6); pointer-events: none; transition: opacity .4s; opacity: 0; }
 .st-title-overlay .t1 { font-family: var(--serif); font-size: clamp(28px, 4vw, 46px); line-height: 1; }
 .st-title-overlay .t2 { font-size: 12px; letter-spacing: .18em; text-transform: uppercase; font-weight: 600; margin-top: 6px; }
@@ -179,6 +180,9 @@ table.t { width: 100%; border-collapse: collapse; font-size: 13px; background: v
 .pj-text { min-height: 150px; }
 .pj-addon { display: grid; grid-template-columns: 1.2fr 80px 2fr auto; gap: 6px; align-items: start; }
 .pj-addon .field { margin-bottom: 6px; padding: 8px 10px; }
+.pj-reel-group { font-weight: 600; margin: 10px 0 4px; }
+.pj-reel { display: grid; grid-template-columns: 1fr 90px 1.3fr; gap: 8px; align-items: center; margin-bottom: 6px; }
+.pj-reel .field { margin: 0; padding: 7px 10px; }
 .pj-save { bottom: 0; border-radius: 0 0 12px 12px; padding: 10px 4px; }
 code { background: var(--gold-soft); padding: 1px 6px; border-radius: 6px; font-size: 14px; }
 @media (max-width: 860px) {
@@ -187,3 +191,4 @@ code { background: var(--gold-soft); padding: 1px 6px; border-radius: 6px; font-
   .pj-addon [data-a="description"] { grid-column: 1 / -1; grid-row: 2; }
   .pj-title { font-size: 34px; }
 }
+.st-reel-tip { grid-column: 1 / -1; margin: 2px 0 0; }

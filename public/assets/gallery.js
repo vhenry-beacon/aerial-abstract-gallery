@@ -227,7 +227,7 @@
     const cartCount = q.cart.length + q.comp.length + q.upsells.length;
     const gifts = q.comp.length ? ` + ${q.comp.length} complimentary` : "";
     let sum;
-    if (!st.packagePaid) sum = `<b>${money(q.total)}</b><br>${c.package.name} package${q.extraCount ? ` + ${q.extraCount} extra` : ""}${q.upsells.length ? " + reel" : ""} · ${q.cart.length} picked${gifts}`;
+    if (!st.packagePaid) sum = `<b>${money(q.total)}</b><br>${c.package.name} package${q.extraCount ? ` + ${q.extraCount} extra` : ""}${q.upsells.length ? ` + ${q.upsells.length} reel${q.upsells.length > 1 ? "s" : ""}` : ""} · ${q.cart.length} picked${gifts}`;
     else if (cartCount) sum = q.total ? `<b>${money(q.total)}</b><br>${cartCount} new item${cartCount > 1 ? "s" : ""}${gifts}`
       : `<b>${cartCount} free item${cartCount > 1 ? "s" : ""}</b><br>${q.cart.length ? "included in your package" : ""}${q.cart.length && q.comp.length ? " · " : ""}${q.comp.length ? "complimentary from Keri" : ""}`;
     else sum = `<b>All set</b><br>Your files are under My files`;
@@ -237,36 +237,48 @@
     btn.textContent = st.packagePaid && cartCount && !q.total ? "Add to my files" : "Review & check out";
   }
 
+  // Add-ons: the highlight reels Keri approved and priced, grouped (Website & YouTube, Social media)
   function renderUpsell() {
     const slot = $("upsellSlot");
-    const u = (data.client.upsells || [])[0];
-    if (!u || tab === "owned" || tab === "photos") { slot.innerHTML = ""; return; }
-    const owned = isOwned(u.unlocks);
-    const inCart = data.state.cartUpsells.includes(u.id);
-    slot.innerHTML = `
-      <div class="upsell">
-        <button class="reel-thumb" id="reelThumb" type="button" aria-label="Watch the full reel">
-          <video src="${u.preview}" poster="${u.poster || ""}" muted loop playsinline autoplay controlslist="nodownload"></video>
+    const ups = data.client.upsells || [];
+    if (!ups.length || tab === "owned" || tab === "photos") { slot.innerHTML = ""; return; }
+    const groups = [];
+    for (const u of ups) {
+      const g = u.group || "Highlight reel";
+      (groups.find((x) => x.g === g) || (groups.push({ g, list: [] }), groups.at(-1))).list.push(u);
+    }
+    const card = (u) => {
+      const owned = isOwned(u.unlocks), inCart = data.state.cartUpsells.includes(u.id);
+      return `<div class="reel-card ${u.orientation === "landscape" ? "wide" : ""}">
+        <button class="reel-thumb" data-watch="${u.id}" type="button" aria-label="Watch ${u.name}">
+          <video src="${u.preview}" poster="${u.poster || ""}" muted loop playsinline preload="none" controlslist="nodownload"></video>
           <span class="play">▶</span>
         </button>
-        <div>
-          <div class="tag">${owned ? "Purchased" : "Add-on · sample preview"}</div>
-          <h3>${u.name}</h3>
+        <div class="reel-info">
+          <div class="tag">${owned ? "Purchased" : inCart ? "In your basket" : "Add-on"}</div>
+          <b>${u.name}</b>
           <p>${u.description}</p>
-          <div class="upsell-actions">
-            <button class="btn ghost" id="reelWatch" type="button">▶ Watch full reel</button>
-            ${owned ? `<span style="color:var(--ink-2)">Your reel is under My files.</span>` :
-              `<button class="btn ${inCart ? "ghost" : "gold"}" id="upsellBtn" type="button">${inCart ? "Remove reel" : `Add reel · ${money(u.price)}`}</button>`}
-          </div>
+          ${owned ? `<span class="reel-owned">Yours: under My files</span>` :
+            `<button class="btn small ${inCart ? "ghost" : "gold"}" data-up="${u.id}" type="button">${inCart ? "Remove" : `Add · ${money(u.price)}`}</button>`}
         </div>
       </div>`;
-    slot.querySelector("video").addEventListener("contextmenu", (e) => e.preventDefault());
-    $("reelThumb").addEventListener("click", () => openReel(u));
-    $("reelWatch").addEventListener("click", () => openReel(u));
-    const b = $("upsellBtn");
-    if (b) b.addEventListener("click", () => toggleUpsell(u.id, !inCart));
+    };
+    slot.innerHTML = `<section class="reels">
+      <div class="reels-head"><div class="tag">Add-ons</div><h3>Highlight reels</h3>
+        <p>Edited reels of your event's best moments. Watch a preview, then add any of them to your order.</p></div>
+      ${groups.map((x) => `<div class="reel-group">${groups.length > 1 || x.g !== "Highlight reel" ? `<h4>${x.g}</h4>` : ""}
+        <div class="reel-grid">${x.list.map(card).join("")}</div></div>`).join("")}
+    </section>`;
+    for (const v of slot.querySelectorAll("video")) {
+      v.addEventListener("contextmenu", (e) => e.preventDefault());
+      const box = v.closest(".reel-card");
+      box.addEventListener("mouseenter", () => v.play().catch(() => {}));
+      box.addEventListener("mouseleave", () => v.pause());
+    }
+    const byId = (id) => ups.find((u) => u.id === id);
+    for (const b of slot.querySelectorAll("[data-watch]")) b.addEventListener("click", () => openReel(byId(b.dataset.watch)));
+    for (const b of slot.querySelectorAll("[data-up]")) b.addEventListener("click", () => toggleUpsell(b.dataset.up, !data.state.cartUpsells.includes(b.dataset.up)));
   }
-
   function renderOwned() {
     const panel = $("ownedPanel");
     const ids = Object.keys(data.state.purchased);
@@ -281,8 +293,7 @@
     const owned = ordered(ids.map((id) => byId[id]).filter(Boolean));
     fillGroups($("ownedClips"), owned.filter((i) => i.type === "video" && !i.upsellOnly));
     fillGroups($("ownedPhotos"), owned.filter((i) => i.type === "photo"));
-    const reel = owned.find((i) => i.upsellOnly);
-    if (reel) {
+    for (const reel of owned.filter((i) => i.upsellOnly)) {
       const row = document.createElement("p");
       row.innerHTML = reel.ready
         ? `<a class="btn" href="/dl/${encodeURIComponent(slug)}/${encodeURIComponent(reel.id)}">Download ${reel.title}</a>`
@@ -460,7 +471,7 @@
     const u = lbReel, b = $("lbPick");
     if (isOwned(u.unlocks)) { b.textContent = "Yours: download in My files"; b.disabled = true; return; }
     b.disabled = false;
-    b.textContent = data.state.cartUpsells.includes(u.id) ? "✓ Reel added. Tap to remove" : `Add reel · ${money(u.price)}`;
+    b.textContent = data.state.cartUpsells.includes(u.id) ? "✓ In your basket. Tap to remove" : `Add this reel · ${money(u.price)}`;
   }
   function goFullscreen() {
     const v = $("lbStage").querySelector("video"); if (!v) return;

@@ -75,7 +75,7 @@
     if (r.status === 401) return showApp(false);
     if (!r.ok) { document.querySelector(".wrap").insertAdjacentHTML("beforeend", `<p class="err">${esc(r.body.error)}</p>`); return; }
     showApp(true);
-    P = r.body.project; saved = JSON.stringify(formData());
+    P = r.body.project; REELS = r.body.reels || []; saved = JSON.stringify(formData());
     fillForm(); renderHead(r.body.worker); renderClaude();
     saved = JSON.stringify(formData()); markDirty();
     if (!uploader) uploader = window.RawUploader({
@@ -90,7 +90,7 @@
   }
   async function refreshStatus() {
     const r = await api(`/api/admin/project?id=${encodeURIComponent(id)}`);
-    if (r.ok) { P = { ...P, ...r.body.project }; renderHead(r.body.worker); renderClaude(); }
+    if (r.ok) { P = { ...P, ...r.body.project }; REELS = r.body.reels || REELS; renderHead(r.body.worker); renderClaude(); renderReelStatus(); }
   }
 
   let W = null; // last auto-editor check-in, shown in the Claude status card
@@ -118,6 +118,33 @@
       el.value = el.hasAttribute("data-money") ? (v ? v / 100 : "") : el.type === "number" && !v ? "" : v ?? "";
     }
     renderAddons(P.quote?.addons || []);
+    renderReelPrices();
+  }
+  // Highlight reel add-ons: one price per format (blank = not offered), next to where the reel stands
+  let REELS = [];
+  const REEL_STATE = { null: "Not made yet", new: "Ready for your review", edits: "Edits requested", revised: "Updated, check it", approved: "Approved", remove: "Removed" };
+  function reelStatus(f) {
+    const offered = f.status === "approved" && P.quote?.reelPrices?.[f.id] > 0;
+    return offered ? "✅ Offered to the client" : REEL_STATE[f.status];
+  }
+  function renderReelPrices() {
+    let group = "";
+    $("reelPrices").innerHTML = REELS.map((f) => {
+      const head = f.group !== group ? `<div class="pj-reel-group">${esc(f.group)} <span class="st-muted">· ${f.orientation === "portrait" ? "vertical" : "horizontal"}</span></div>` : "";
+      group = f.group;
+      const v = P.quote?.reelPrices?.[f.id];
+      return `${head}<div class="pj-reel"><span>${esc(f.label)}</span>
+        <input class="field" type="number" min="0" step="1" placeholder="$" data-reel="${esc(f.id)}" value="${v ? v / 100 : ""}" aria-label="${esc(f.group)} ${esc(f.label)} price">
+        <span class="st-small st-muted" data-reelstate="${esc(f.id)}">${reelStatus(f)}</span></div>`;
+    }).join("") || `<p class="st-muted st-small">Reels can be added once the gallery is built.</p>`;
+  }
+  function renderReelStatus() {
+    for (const f of REELS) { const el = document.querySelector(`[data-reelstate="${f.id}"]`); if (el) el.textContent = reelStatus(f); }
+  }
+  function reelPricesFromForm() {
+    const out = {};
+    for (const el of document.querySelectorAll("[data-reel]")) { const c = Math.round(Number(el.value || 0) * 100); if (c > 0) out[el.dataset.reel] = c; }
+    return out;
   }
   function renderAddons(list) {
     $("addons").innerHTML = list.map((a, k) => `<div class="pj-addon" data-addon="${k}">
@@ -140,6 +167,7 @@
       set(d, el.dataset.k, v);
     }
     set(d, "quote.addons", addonsFromForm().filter((a) => a.name));
+    set(d, "quote.reelPrices", reelPricesFromForm());
     return d;
   }
   function markDirty() {
@@ -151,11 +179,11 @@
     const r = await api("/api/admin/project", formData());
     if (!r.ok) { alert(r.body.error || "Couldn't save"); return false; }
     P = { ...P, ...r.body.project }; saved = JSON.stringify(formData());
-    $("pjName").textContent = P.name; markDirty();
+    $("pjName").textContent = P.name; markDirty(); renderReelStatus();
     return true;
   }
   if (!isHome) {
-    document.addEventListener("input", (e) => { if (e.target.closest("[data-k], .pj-addon")) markDirty(); });
+    document.addEventListener("input", (e) => { if (e.target.closest("[data-k], .pj-addon, [data-reel]")) markDirty(); });
     $("addAddon").onclick = () => { renderAddons([...addonsFromForm(), { name: "", price: 0, description: "" }]); markDirty(); };
     $("addons").addEventListener("click", (e) => {
       const b = e.target.closest("[data-delAddon]"); if (!b) return;

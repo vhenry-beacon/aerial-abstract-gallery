@@ -55,6 +55,9 @@
     if (!r.ok) { toast(r.body.error || "Couldn't load the gallery"); return; }
     D = r.body;
     $("previewLink").href = `/g/${encodeURIComponent(slug)}`;
+    // the old one-reel arranger only for galleries that still have that reel
+    document.querySelector('#stTabs [data-tab="reel"]').classList.toggle("hidden", !D.items.some((i) => i.id === "highlight-reel"));
+    if (tab === "reel" && !D.items.some((i) => i.id === "highlight-reel")) setTab("items");
     renderPublish();
     renderItems();
     if (!rdraft) rdraft = reelFromReview();
@@ -159,7 +162,8 @@
   };
 
   function renderItems() {
-    const items = D.items.filter((i) => !i.upsellOnly);
+    // highlight reels (items with `reel`) are reviewed here too, after the photos and clips
+    const items = [...D.items.filter((i) => !i.upsellOnly), ...D.items.filter((i) => i.reel)];
     const counts = { all: items.length };
     for (const s of Object.keys(STATUS)) counts[s] = items.filter((i) => rev(i.id).status === s).length;
     counts.queued = items.filter((i) => editWaiting(rev(i.id))).length;
@@ -187,7 +191,14 @@
       return `<h3 class="st-sec">${title} · ${xs.length}</h3>` + gs.map((g) =>
         `${gs.length > 1 ? `<div class="st-subsec">${g.label} · ${g.items.length}</div>` : ""}${g.items.map(thumb).join("")}`).join("");
     };
-    $("grid").innerHTML = part("Videos", list.filter((i) => i.type === "video")) + part("Pictures", list.filter((i) => i.type !== "video"))
+    const reels = list.filter((i) => i.reel);
+    const reelPart = reels.length ? `<h3 class="st-sec">Highlight reels · ${reels.length}</h3>` +
+      [["landscape", "Website &amp; YouTube (horizontal)"], ["portrait", "Social media (vertical)"]].map(([o, label]) => {
+        const xs = reels.filter((i) => i.orientation === o);
+        return xs.length ? `<div class="st-subsec">${label} · ${xs.length}</div>${xs.map(thumb).join("")}` : "";
+      }).join("") + `<p class="st-small st-muted st-reel-tip">Approve a reel and give it a price on the project page to offer it to the client.</p>` : "";
+    const plain = list.filter((i) => !i.reel);
+    $("grid").innerHTML = part("Videos", plain.filter((i) => i.type === "video")) + part("Pictures", plain.filter((i) => i.type !== "video")) + reelPart
       || `<p class="empty">Nothing here.</p>`;
   }
   $("filters").addEventListener("click", async (e) => {
@@ -239,7 +250,7 @@
         <button class="btn approve ${r.status === "approved" ? "is-on" : ""}" data-status="approved" type="button">✓ Approve</button>
         <button class="btn edits ${r.status === "edits" ? "is-on" : ""}" data-status="edits" type="button">Needs edits</button>
         <button class="btn remove ${r.status === "remove" ? "is-on" : ""}" data-status="remove" type="button">Remove</button>
-        <button class="btn comp ${r.comp ? "is-on" : ""}" id="compToggle" type="button" title="A free extra for the client: it goes in their basket at no charge and doesn't use one of their included picks">🎁 Complimentary</button>
+        ${i.upsellOnly ? "" : `<button class="btn comp ${r.comp ? "is-on" : ""}" id="compToggle" type="button" title="A free extra for the client: it goes in their basket at no charge and doesn't use one of their included picks">🎁 Complimentary</button>`}
       </div>
       <h3>Look</h3>
       <div class="st-looks" id="looks"></div>
@@ -481,7 +492,7 @@
     }
     else if (t.dataset.delpiece && p) { rdraft.pieces.splice(pieceIdx, 1); pieceIdx = Math.min(pieceIdx, rdraft.pieces.length - 1); reelChanged(); renderPiece(); }
     else if (t.dataset.playpiece && p) playReel(pieceIdx, true);
-    else if (t.dataset.ptnow && p) setPieceTime(t.dataset.ptnow, $("reelVideo").currentTime);
+    else if (t.dataset.ptnow && p) setPieceTime(t.dataset.ptnow, curV().currentTime);
     else if (t.dataset.pspeed && p) { p.speed = Number(t.dataset.pspeed); reelChanged(); renderPiece(); }
     else if (t.dataset.plook !== undefined && p) { p.look = t.dataset.plook ? { preset: t.dataset.plook } : null; reelChanged(); renderPiece(); showReelFrame(pieceIdx); }
     else if (t.dataset.rstatus) { if (await save({ reelStatus: t.dataset.rstatus }, "Reel status saved")) renderReel(); }
@@ -522,7 +533,7 @@
       else { p.in = Math.max(0, p.out - 0.5); p.out = Math.max(p.out, p.in + 0.5); }
     }
     reelChanged(); renderPiece();
-    const vEl = $("reelVideo"); stopReel(); vEl.currentTime = which === "in" ? p.in : Math.max(p.in, p.out - 0.05);
+    const vEl = curV(); stopReel(); vEl.currentTime = which === "in" ? p.in : Math.max(p.in, p.out - 0.05);
   }
 
   // drag to reorder pieces
@@ -541,12 +552,40 @@
   // Reel preview: plays each piece's clip preview from its start to its end, at its speed and look.
   const seq = { playing: false, i: 0, single: false, reelTime: 0, raf: 0 };
   const startOf = (k) => rdraft.pieces.slice(0, k).reduce((a, p) => a + pieceLen(p) - (rdraft.transition === "fade" ? XF : 0), 0);
-  function loadPiece(k, then) {
-    const p = rdraft.pieces[k], v = $("reelVideo"); if (!p) return;
-    const c = clipById(p.clip);
-    const go = () => { v.currentTime = p.in; v.playbackRate = p.speed || 1; v.style.filter = Looks.cssFilter(p.look || rdraft.look); then && then(); };
+  // Two stacked players: the next piece loads and seeks in the hidden one, then they swap, so the preview never
+  // shows a black gap while a clip loads (Keri, Nov 2, 2026: "remove the black spaces between each clip").
+  const R = {};
+  function vids() {
+    if (!R.a || !R.a.isConnected) {
+      R.a = $("reelVideo"); R.a.style.opacity = "1";
+      R.b = R.a.cloneNode(); R.b.id = "reelVideoB"; R.b.classList.add("st-reel-buf"); R.b.style.opacity = "0";
+      R.a.after(R.b);
+    }
+    return R;
+  }
+  const curV = () => { const { a, b } = vids(); return b.style.opacity === "1" ? b : a; };
+  function prepare(k) {
+    if (seq.prep?.k === k) return seq.prep.done;
+    const p = rdraft.pieces[k], c = clipById(p.clip), cur = curV(), nxt = cur === R.a ? R.b : R.a;
+    const done = new Promise((res) => {
+      const ready = () => res(nxt);
+      const seek = () => { nxt.addEventListener("seeked", ready, { once: true }); setTimeout(ready, 1500); nxt.currentTime = p.in; };
+      if (!nxt.src.endsWith(c.preview)) { nxt.src = c.preview; nxt.addEventListener("loadedmetadata", seek, { once: true }); } else seek();
+    });
+    seq.prep = { k, done };
+    return done;
+  }
+  async function loadPiece(k, then) {
+    const p = rdraft.pieces[k]; if (!p) return;
     for (const b of $("timeline").children) b.classList.toggle("playing", Number(b.dataset.pc) === k && seq.playing);
-    if (!v.src.endsWith(c.preview)) { v.src = c.preview; v.addEventListener("loadedmetadata", go, { once: true }); } else go();
+    seq.switching = true;
+    const nxt = await prepare(k), cur = curV();
+    seq.prep = null;
+    nxt.playbackRate = p.speed || 1; nxt.style.filter = Looks.cssFilter(p.look || rdraft.look);
+    if (then) await then(nxt);
+    nxt.style.opacity = "1";
+    if (cur !== nxt) { cur.style.opacity = "0"; cur.pause(); }
+    seq.switching = false;
   }
   function showReelFrame(k) { if (!seq.playing && rdraft.pieces[Math.max(0, k)]) loadPiece(Math.max(0, k)); updateTitle(k > 0 ? 99 : 0); }
   function updateTitle(t) {
@@ -558,26 +597,28 @@
     if (!rdraft.pieces.length) return;
     seq.playing = true; seq.i = k; seq.single = single;
     $("reelPlay").textContent = "■ Stop";
-    loadPiece(k, () => $("reelVideo").play());
+    loadPiece(k, (v) => v.play().catch(() => {}));
     cancelAnimationFrame(seq.raf); seq.raf = requestAnimationFrame(tick);
   }
   function stopReel() {
     seq.playing = false; cancelAnimationFrame(seq.raf);
-    const v = $("reelVideo"); if (v) v.pause();
+    for (const v of [R.a, R.b]) if (v) v.pause();
     if ($("reelPlay")) $("reelPlay").textContent = "▶ Play reel";
     for (const b of $("timeline")?.children || []) b.classList.remove("playing");
   }
   function tick() {
     if (!seq.playing) return;
-    const v = $("reelVideo"), p = rdraft.pieces[seq.i];
-    if (p && !v.seeking && v.readyState >= 2) {
+    const v = curV(), p = rdraft.pieces[seq.i];
+    if (p && !seq.switching && !v.seeking && v.readyState >= 2) {
       seq.reelTime = startOf(seq.i) + Math.max(0, v.currentTime - p.in) / (p.speed || 1);
       $("reelClock").textContent = `${clock(seq.reelTime)} / ${clock(reelLength())}`;
       if ($("reelNoteTime")) $("reelNoteTime").textContent = clock(seq.reelTime);
       updateTitle(seq.single ? 99 : seq.reelTime);
+      // get the next piece ready in the hidden player a little before this one ends
+      if (!seq.single && seq.i + 1 < rdraft.pieces.length && v.currentTime >= p.out - 0.8) prepare(seq.i + 1);
       if (v.currentTime >= p.out - 0.03 || v.ended) {
-        if (seq.single) loadPiece(seq.i, () => v.play());
-        else if (seq.i + 1 < rdraft.pieces.length) { seq.i++; loadPiece(seq.i, () => v.play()); }
+        if (seq.single) loadPiece(seq.i, (n) => n.play().catch(() => {}));
+        else if (seq.i + 1 < rdraft.pieces.length) { seq.i++; loadPiece(seq.i, (n) => n.play().catch(() => {})); }
         else { stopReel(); return; }
       }
     }
