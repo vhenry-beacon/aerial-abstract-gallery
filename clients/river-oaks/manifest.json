@@ -780,7 +780,7 @@
       "type": "video",
       "title": "Wide clip 15",
       "category": "aerial",
-      "duration": 13.01,
+      "duration": 12.18,
       "orientation": "landscape",
       "width": 3840,
       "height": 2160,
@@ -793,8 +793,10 @@
         3267
       ],
       "fullFile": "wide-15.mp4",
-      "preview": "/media/river-oaks/wide-15.mp4",
-      "poster": "/media/river-oaks/wide-15.jpg"
+      "preview": "/media/river-oaks/wide-15.mp4?v=1",
+      "poster": "/media/river-oaks/wide-15.jpg?v=1",
+      "origPreview": "/media/river-oaks/wide-15.orig.mp4",
+      "origPoster": "/media/river-oaks/wide-15.orig.jpg"
     },
     {
       "id": "wide-16",
