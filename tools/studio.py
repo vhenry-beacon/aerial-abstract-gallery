@@ -19,7 +19,7 @@ After rendering, rebuild and deploy the site (previews and manifest changed) and
 Credentials: ADMIN_PASSWORD and R2_* from the environment, else read with `netlify env:get`.
 Requires ffmpeg, Pillow, numpy (use the project's .venv).
 """
-import argparse, datetime, hashlib, hmac, http.client, json, os, subprocess, sys, tempfile, urllib.parse, urllib.request
+import argparse, datetime, hashlib, hmac, http.client, json, os, subprocess, sys, tempfile, time, urllib.parse, urllib.request
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -140,7 +140,9 @@ class R2:
     def put(self, key, path, content_type):
         md5 = hashlib.md5(open(path, "rb").read()).hexdigest()
         size = os.path.getsize(path)
-        for attempt in range(1, 6):
+        for attempt in range(1, 11):
+            if attempt > 1:
+                time.sleep(min(30, 3 * attempt))  # dropped connections come in bursts; wait them out
             try:
                 with open(path, "rb") as f:
                     conn, r = self._req("PUT", key, {"content-type": content_type}, body=f, length=size)
@@ -240,7 +242,9 @@ def render_video(src, edit, out):
     if lf := look_filter((edit or {}).get("look")):
         vf.append(lf)
     vf.append("format=yuv420p")
-    cmd = ["ffmpeg", "-y", "-ss", f"{t0}", "-t", f"{t1 - t0}", "-i", src, "-map", "0:v:0", "-vf", ",".join(vf),
+    # no trim: take the whole file (a seconds-based -t here dropped the last frame of some clips)
+    span = ["-ss", f"{t0}", "-t", f"{t1 - t0}"] if (edit or {}).get("trim") else []
+    cmd = ["ffmpeg", "-y", *span, "-i", src, "-map", "0:v:0", "-vf", ",".join(vf),
            "-c:v", "libx264", "-preset", "medium", "-crf", "16"]
     if info["audio"]:
         cmd += ["-map", "0:a:0", "-c:a", "aac", "-b:a", "192k"] + (["-af", atempo(speed)] if speed != 1 else [])

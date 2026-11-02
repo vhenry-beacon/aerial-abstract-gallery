@@ -70,6 +70,22 @@ def run(cmd):
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def cut_clip(src, fa, fb, fps, out, crf=16):
+    """Full-quality clip of source frames fa..fb-1 exactly (fb is the first frame of the next clip).
+
+    Cuts are counted in frames, not seconds: seeking half a frame before frame fa and keeping exactly
+    fb - fa frames means the clip never ends on the next scene's first frame (the old seconds-based
+    -t cut did, on every clip, because the rounded end landed just past that frame).
+    """
+    # Only the frame count limits the video (an extra seconds-based -t dropped the last frame on some clips);
+    # the sound is trimmed to the same length.
+    run(["ffmpeg", "-y", "-ss", f"{max(0.0, (fa - 0.5) / fps):.6f}", "-i", src,
+         "-map", "0:v:0", "-map", "0:a:0?", "-vf", "setpts=PTS-STARTPTS", "-frames:v", str(fb - fa),
+         "-af", f"asetpts=PTS-STARTPTS,atrim=end={(fb - fa) / fps:.6f}",
+         "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-pix_fmt", "yuv420p",
+         "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out])
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", required=True, action="append")
@@ -107,11 +123,10 @@ def main():
             for a, b in segs:
                 cid = f"{args.prefix}-{n:02d}"
                 full = os.path.join(args.full, f"{cid}.mp4")
-                # full quality: frame-accurate cut, original resolution, audio kept as-is (AAC)
-                run(["ffmpeg", "-y", "-ss", f"{a}", "-i", src, "-t", f"{b - a}",
-                     "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "libx264", "-preset", "veryfast",
-                     "-crf", str(args.crf), "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
-                     "-movflags", "+faststart", full])
+                fa, fb = round(a * info["fps"]), round(b * info["fps"])  # scene cuts land on whole frames
+                a, b = round(fa / info["fps"], 3), round(fb / info["fps"], 3)
+                # full quality: frame-exact cut, original resolution, audio kept (AAC)
+                cut_clip(src, fa, fb, info["fps"], full, args.crf)
                 # preview: small, silent, watermarked
                 run(["ffmpeg", "-y", "-i", full, "-i", wm, "-filter_complex",
                      f"[0:v]scale={pw}:{ph},fps=30[v];[v][1:v]overlay=0:0",
@@ -124,6 +139,7 @@ def main():
                     "duration": round(b - a, 2), "orientation": "portrait" if portrait else "landscape",
                     "width": info["w"], "height": info["h"],
                     "source": os.path.basename(src), "sourceStart": a, "sourceEnd": b,
+                    "sourceFrames": [fa, fb],
                     "fullFile": f"{cid}.mp4",
                 })
                 print(f"  {cid}  {a:7.2f}-{b:7.2f}  {os.path.getsize(full) / 1e6:6.1f} MB", file=sys.stderr)

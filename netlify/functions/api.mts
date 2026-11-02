@@ -120,7 +120,9 @@ async function projectSummary(p: any, rawFolders: Set<string>) {
   const client = p.gallerySlug ? getClient(p.gallerySlug) : null;
   if (client) {
     const [review, state, orders] = await Promise.all([getReview(client.slug), getState(client), listOrders(client.slug)]);
-    status = state.packagePaid || orders.some((o: any) => o.status === "paid") ? "paid" : review.published ? "published" : "reviewing";
+    // Stripe test-mode orders (cs_test_ sessions) don't make a project "Paid"
+    const realPaid = orders.some((o: any) => o.status === "paid" && !String(o.stripeSessionId || "").startsWith("cs_test_"));
+    status = state.packagePaid || realPaid ? "paid" : review.published ? "published" : "reviewing";
     const photo = client.items.find((i: any) => i.type === "photo") || client.items.find((i: any) => i.poster);
     cover = photo ? photo.preview || photo.poster : null;
     const items = client.items.filter((i: any) => !i.upsellOnly);
