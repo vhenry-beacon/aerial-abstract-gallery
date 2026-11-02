@@ -45,10 +45,10 @@ async function galleryPayload(client: any, admin = false) {
     items: visible.map((i: any) => ({
       id: i.id, type: i.type, title: i.title, preview: i.preview, poster: i.poster,
       duration: i.duration, orientation: i.orientation, upsellOnly: !!i.upsellOnly,
-      ready: !!metas[i.id],
+      comp: !!review.items[i.id]?.comp, ready: !!metas[i.id],
     })),
     state: { packagePaid: state.packagePaid, selected: state.selected, cartUpsells: state.cartUpsells, purchased: state.purchased },
-    quote: quote(client, state),
+    quote: quote(client, state, asPublished),
     paymentsEnabled: !!stripeKey(),
     ...(admin ? { adminPreview: { published: review.published, hidden: client.items.length - visible.length } } : {}),
   };
@@ -200,6 +200,7 @@ export default async (req: Request, context: Context) => {
         const admin = await isAdmin(req);
         const review = await getReview(slug);
         if (on && !clientCanSee(item, admin ? { ...review, published: true } : review, state)) return bad("That item isn't available yet");
+        if (on && review.items[id]?.comp) return bad("This one is complimentary. It's already in your basket at no charge.");
         state.selected = state.selected.filter((x: string) => x !== id);
         if (on) state.selected.push(id);
       }
@@ -213,14 +214,14 @@ export default async (req: Request, context: Context) => {
       if (!client) return bad("Gallery not found", 404);
       if (!(await isClientAuthed(req, slug))) return bad("Please sign in", 401);
       const state = await getState(client);
-      const q = quote(client, state);
-      if (!q.cart.length && !q.upsells.length && !q.packageIncluded) return bad("Your cart is empty");
+      const q = quote(client, state, await getReview(slug));
+      if (!q.cart.length && !q.comp.length && !q.upsells.length && !q.packageIncluded) return bad("Your cart is empty");
       const order: any = {
         id: crypto.randomUUID(), slug, createdAt: new Date().toISOString(), status: "pending",
-        lines: q.lines, total: q.total, assign: q.assign, upsells: q.upsells, packageIncluded: q.packageIncluded,
+        lines: q.lines, total: q.total, assign: q.assign, comp: q.comp, upsells: q.upsells, packageIncluded: q.packageIncluded,
       };
       if (q.total === 0) {
-        // Package already paid and picks fit inside the remaining included slots: no charge.
+        // Package already paid and picks fit inside the remaining included slots (or only complimentary items): no charge.
         await saveOrder(order);
         await fulfillOrder(client, order, "included");
         return json({ claimed: true, ...(await galleryPayload(client, await isAdmin(req))) });
@@ -500,6 +501,11 @@ export default async (req: Request, context: Context) => {
             if (!REVIEW_STATUSES.includes(b.status)) return bad("Unknown status");
             r.status = b.status;
           }
+          // Complimentary: a free extra outside the package's included picks; it's for the client, so it's approved too
+          if (typeof b.comp === "boolean" && !item.upsellOnly) {
+            r.comp = b.comp;
+            if (b.comp) r.status = "approved";
+          }
           if (b.edit !== undefined) {
             r.edit = cleanEdit(b.edit, item);
             if (b.status === undefined && by === "Keri") r.status = r.edit ? "edits" : r.status;
@@ -585,8 +591,8 @@ export default async (req: Request, context: Context) => {
         else if (action === "revoke" && id) delete state.purchased[id];
         else if (action === "mark-cart-paid") {
           // Client paid outside the site (PayPal, check): fulfill the current cart as a manual order.
-          const q = quote(client, state);
-          const order: any = { id: crypto.randomUUID(), slug, createdAt: at, status: "pending", lines: q.lines, total: q.total, assign: q.assign, upsells: q.upsells, packageIncluded: q.packageIncluded };
+          const q = quote(client, state, await getReview(slug));
+          const order: any = { id: crypto.randomUUID(), slug, createdAt: at, status: "pending", lines: q.lines, total: q.total, assign: q.assign, comp: q.comp, upsells: q.upsells, packageIncluded: q.packageIncluded };
           await saveOrder(order);
           await fulfillOrder(client, order, "manual");
           return json({ ok: true });

@@ -118,17 +118,19 @@
   }
   const isOwned = (id) => !!data.state.purchased[id];
   const isPicked = (id) => data.state.selected.includes(id);
+  const isComp = (id) => (data.quote.comp || []).includes(id);  // Keri's gift: already in the basket, free, outside the picks
 
   function pickLabel(id) {
     const kind = data.quote.assign[id];
     if (isOwned(id)) return "Yours";
     if (!kind) return "";
+    if (kind === "comp") return "🎁 Complimentary";
     return kind === "included" ? "Included" : `+${money(data.client.extraPrice)}`;
   }
 
   function card(it) {
     const el = document.createElement("div");
-    el.className = "card" + (isPicked(it.id) ? " sel" : "") + (isOwned(it.id) ? " owned" : "");
+    el.className = "card" + (isPicked(it.id) || isComp(it.id) ? " sel" : "") + (isOwned(it.id) ? " owned" : "") + (isComp(it.id) ? " comp" : "");
     let media;
     if (it.type === "video") {
       media = document.createElement("video");
@@ -156,7 +158,7 @@
       a.textContent = it.ready ? "Download" : "Preparing…";
       if (it.ready) a.href = `/dl/${encodeURIComponent(slug)}/${encodeURIComponent(it.id)}`;
       el.appendChild(a);
-    } else {
+    } else if (!isComp(it.id)) {
       const p = document.createElement("button");
       p.className = "pick"; p.type = "button";
       p.setAttribute("aria-label", isPicked(it.id) ? "Remove from picks" : "Add to picks");
@@ -172,7 +174,7 @@
   }
 
   function visible(list) {
-    if (tab === "picked") return list.filter((i) => isPicked(i.id));
+    if (tab === "picked") return list.filter((i) => isPicked(i.id) || isComp(i.id));
     return list;
   }
 
@@ -194,7 +196,7 @@
     $("meter").classList.toggle("over", q.extraCount > 0);
 
     // tabs
-    const counts = { all: all.length, clips: clips.length, photos: photos.length, picked: st.selected.length, owned: Object.keys(st.purchased).length };
+    const counts = { all: all.length, clips: clips.length, photos: photos.length, picked: st.selected.length + q.comp.length, owned: Object.keys(st.purchased).length };
     document.querySelectorAll(".tab").forEach((t) => {
       const k = t.dataset.tab;
       t.setAttribute("aria-selected", String(k === tab));
@@ -217,15 +219,17 @@
     $("photosSection").classList.toggle("hidden", tab === "owned" || !showPhotos || !vp.length);
     $("ownedPanel").classList.toggle("hidden", tab !== "owned");
     if (tab === "owned") renderOwned();
-    const empty = tab === "picked" && !st.selected.length;
+    const empty = tab === "picked" && !st.selected.length && !q.comp.length;
     $("emptyMsg").classList.toggle("hidden", !empty);
     $("emptyMsg").textContent = empty ? "You haven't picked anything yet. Tap + on any clip or photo." : "";
 
     // bar
-    const cartCount = q.cart.length + q.upsells.length;
+    const cartCount = q.cart.length + q.comp.length + q.upsells.length;
+    const gifts = q.comp.length ? ` + ${q.comp.length} complimentary` : "";
     let sum;
-    if (!st.packagePaid) sum = `<b>${money(q.total)}</b><br>${c.package.name} package${q.extraCount ? ` + ${q.extraCount} extra` : ""}${q.upsells.length ? " + reel" : ""} · ${q.cart.length} picked`;
-    else if (cartCount) sum = q.total ? `<b>${money(q.total)}</b><br>${cartCount} new item${cartCount > 1 ? "s" : ""}` : `<b>${q.cart.length} free pick${q.cart.length > 1 ? "s" : ""}</b><br>still included in your package`;
+    if (!st.packagePaid) sum = `<b>${money(q.total)}</b><br>${c.package.name} package${q.extraCount ? ` + ${q.extraCount} extra` : ""}${q.upsells.length ? " + reel" : ""} · ${q.cart.length} picked${gifts}`;
+    else if (cartCount) sum = q.total ? `<b>${money(q.total)}</b><br>${cartCount} new item${cartCount > 1 ? "s" : ""}${gifts}`
+      : `<b>${cartCount} free item${cartCount > 1 ? "s" : ""}</b><br>${q.cart.length ? "included in your package" : ""}${q.cart.length && q.comp.length ? " · " : ""}${q.comp.length ? "complimentary from Keri" : ""}`;
     else sum = `<b>All set</b><br>Your files are under My files`;
     $("barSum").innerHTML = sum;
     const btn = $("checkoutBtn");
@@ -391,6 +395,7 @@
     const q = data.quote, c = data.client;
     $("lines").innerHTML = q.lines.map((l) => `<tr><td>${l.name}${l.qty > 1 ? ` × ${l.qty}` : ""}</td><td>${money(l.unit * l.qty)}</td></tr>`).join("")
       + (q.freeCount ? `<tr><td>${q.freeCount} included pick${q.freeCount > 1 ? "s" : ""}</td><td>Included</td></tr>` : "")
+      + (q.comp.length ? `<tr><td>${q.comp.length} complimentary item${q.comp.length > 1 ? "s" : ""}, a gift from ${c.provider?.person?.split(" ")[0] || "us"}</td><td>Free</td></tr>` : "")
       + `<tr class="total"><td>Total</td><td>${money(q.total)}</td></tr>`;
     const note = $("drawerNote");
     const remaining = q.freeSlots - q.freeCount;
@@ -437,6 +442,7 @@
     $("lbFull").classList.toggle("hidden", it.type !== "video");
     const b = $("lbPick");
     if (isOwned(it.id)) { b.textContent = "Yours: download in My files"; b.disabled = true; }
+    else if (isComp(it.id)) { b.textContent = "🎁 Complimentary: already in your basket"; b.disabled = true; }
     else { b.disabled = false; b.textContent = isPicked(it.id) ? `✓ Picked (${pickLabel(it.id)}). Tap to remove` : "+ Add to picks"; }
   }
 

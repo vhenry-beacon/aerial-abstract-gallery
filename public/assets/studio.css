@@ -25,6 +25,7 @@ h3 { font-size: 15px; margin: 18px 0 8px; }
 .st-thumb.on { outline-color: var(--ink); }
 .st-thumb .pill { position: absolute; left: 6px; top: 6px; }
 .st-thumb .lbl { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 6px 5px; font-size: 11px; color: #fff; text-align: left; background: linear-gradient(transparent, rgba(0,0,0,.75)); }
+.st-thumb .gift { position: absolute; left: 6px; bottom: 24px; font-size: 13px; background: rgba(0,0,0,.6); border-radius: 99px; padding: 1px 6px; }
 .st-thumb .notes { position: absolute; right: 6px; bottom: 24px; font-size: 11px; background: rgba(0,0,0,.6); color: #fff; border-radius: 99px; padding: 1px 7px; }
 
 .st-editor { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); position: sticky; top: 10px; max-height: calc(100vh - 20px); overflow: auto; }
@@ -39,6 +40,8 @@ h3 { font-size: 15px; margin: 18px 0 8px; }
 .btn.approve { background: var(--accent); color: var(--accent-ink); }
 .btn.edits { background: var(--gold); color: #fff; }
 .btn.remove { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+.btn.comp { background: var(--gold-soft); color: var(--ink); border: 1px solid var(--gold); }
+.btn.comp.is-on { background: var(--gold); color: #fff; }
 .btn.is-on { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--ink); }
 
 .st-chips { display: flex; flex-wrap: wrap; gap: 6px; }

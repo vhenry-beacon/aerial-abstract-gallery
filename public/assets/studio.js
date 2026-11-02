@@ -111,9 +111,11 @@
     const items = D.items.filter((i) => !i.upsellOnly);
     const approved = items.filter((i) => rev(i.id).status === "approved").length;
     const pub = D.review.published;
+    const gifts = items.filter((i) => rev(i.id).comp && rev(i.id).status === "approved").length;
+    const giftText = gifts ? ` (${gifts} complimentary 🎁)` : "";
     $("pubText").innerHTML = pub
-      ? `<span class="live">● Published</span> · client sees ${approved} approved item${approved === 1 ? "" : "s"}`
-      : `Not published · ${approved} of ${items.length} approved`;
+      ? `<span class="live">● Published</span> · client sees ${approved} approved item${approved === 1 ? "" : "s"}${giftText}`
+      : `Not published · ${approved} of ${items.length} approved${giftText}`;
     $("pubBtn").textContent = pub ? "Unpublish" : "Publish gallery";
     $("pubBtn").className = `btn small ${pub ? "ghost" : ""}`;
   }
@@ -161,12 +163,13 @@
     const counts = { all: items.length };
     for (const s of Object.keys(STATUS)) counts[s] = items.filter((i) => rev(i.id).status === s).length;
     counts.queued = items.filter((i) => editWaiting(rev(i.id))).length;
-    const order = ["all", "queued", "new", "edits", "revised", "approved", "remove"];
+    counts.comp = items.filter((i) => rev(i.id).comp).length;
+    const order = ["all", "queued", "new", "edits", "revised", "approved", "comp", "remove"];
     const edited = items.filter((i) => rev(i.id).edit || rev(i.id).rendered?.edit).length;
     $("filters").innerHTML = order.filter((k) => k === "all" || counts[k])
-      .map((k) => `<button class="st-chip ${filter === k ? "on" : ""}" data-f="${k}" type="button">${k === "all" ? "All" : k === "queued" ? "⏳ Edit queued" : STATUS[k]} · ${counts[k]}</button>`).join("")
+      .map((k) => `<button class="st-chip ${filter === k ? "on" : ""}" data-f="${k}" type="button">${k === "all" ? "All" : k === "queued" ? "⏳ Edit queued" : k === "comp" ? "🎁 Complimentary" : STATUS[k]} · ${counts[k]}</button>`).join("")
       + (edited ? `<button class="st-chip st-undo-all" id="undoAll" type="button">↺ Undo all edits (${edited})</button>` : "");
-    const list = items.filter((i) => filter === "all" || (filter === "queued" ? editWaiting(rev(i.id)) : rev(i.id).status === filter));
+    const list = items.filter((i) => filter === "all" || (filter === "queued" ? editWaiting(rev(i.id)) : filter === "comp" ? rev(i.id).comp : rev(i.id).status === filter));
     // grouped like the client gallery: Videos, then Pictures, each split into sections (sections.js)
     const thumb = (i) => {
       const r = rev(i.id);
@@ -175,6 +178,7 @@
         <img src="${esc(thumbOf(i))}" alt="" loading="lazy" style="filter:${Looks.cssFilter(r.edit?.look)}">
         ${pill(r, editWaiting(r))}
         ${userNotes ? `<span class="notes">💬 ${userNotes}</span>` : ""}
+        ${r.comp ? `<span class="gift" title="Complimentary">🎁</span>` : ""}
         <span class="lbl">${esc(i.title)}${i.duration ? ` · ${secs(i.duration)}` : ""}</span></button>`;
     };
     const part = (title, xs) => {
@@ -235,6 +239,7 @@
         <button class="btn approve ${r.status === "approved" ? "is-on" : ""}" data-status="approved" type="button">✓ Approve</button>
         <button class="btn edits ${r.status === "edits" ? "is-on" : ""}" data-status="edits" type="button">Needs edits</button>
         <button class="btn remove ${r.status === "remove" ? "is-on" : ""}" data-status="remove" type="button">Remove</button>
+        <button class="btn comp ${r.comp ? "is-on" : ""}" id="compToggle" type="button" title="A free extra for the client: it goes in their basket at no charge and doesn't use one of their included picks">🎁 Complimentary</button>
       </div>
       <h3>Look</h3>
       <div class="st-looks" id="looks"></div>
@@ -348,6 +353,11 @@
       const text = $("noteText").value.trim(); if (!text) return $("noteText").focus();
       const at = m?.tagName === "VIDEO" && $("noteAtTime")?.checked ? m.currentTime : null;
       if (await save({ id: curId, note: { text, t: at } }, "Note saved")) { $("noteText").value = ""; renderNotes(); renderItems(); refreshStatusPill(); }
+    } else if (t.id === "compToggle") {
+      const on = !rev(curId).comp;
+      if (await save({ id: curId, comp: on }, on ? "Complimentary: approved, and free in the client's basket" : "No longer complimentary")) {
+        renderItems(); renderEditor(); renderPublish();
+      }
     } else if (t.id === "toOriginal") {
       if (!confirm("Undo every edit on this item and go back to the original?")) return;
       if (await save({ id: curId, edit: null }, rev(curId).rendered?.edit ? "Going back to the original. The final file is restored within 15 minutes." : "Edit request cleared")) {
