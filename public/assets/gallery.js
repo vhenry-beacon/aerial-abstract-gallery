@@ -256,7 +256,7 @@
     const ready = ids.filter((id) => byId[id]?.ready);
     panel.innerHTML = `
       <div class="section-h"><h2>My files</h2><span>${ids.length} file${ids.length > 1 ? "s" : ""} · full resolution</span></div>
-      ${ready.length > 1 ? `<button class="btn" id="dlAll" type="button" style="margin-bottom:16px">Download all (${ready.length})</button>` : ""}
+      ${ready.length > 1 ? `<button class="btn" id="dlAll" type="button" style="margin-bottom:16px">Download all as one zip (${ready.length} files)</button>` : ""}
       <div class="grid clips" id="ownedClips"></div>
       <div class="grid photos" id="ownedPhotos"></div>`;
     const owned = ids.map((id) => byId[id]).filter(Boolean);
@@ -271,17 +271,66 @@
       panel.insertBefore(row, $("ownedClips"));
     }
     const all = $("dlAll");
-    if (all) all.addEventListener("click", async () => {
-      all.disabled = true;
-      for (const id of ready) {
-        const a = document.createElement("a");
-        a.href = `/dl/${encodeURIComponent(slug)}/${encodeURIComponent(id)}`;
-        a.download = "";
-        document.body.appendChild(a); a.click(); a.remove();
-        await new Promise((r) => setTimeout(r, 1200));
+    if (all) all.addEventListener("click", () => downloadAll(all, ready));
+  }
+
+  // "Download all": one zip, built in the browser by /zip-sw.js as it downloads. Browsers without
+  // service workers fall back to one file at a time.
+  async function downloadAll(btn, ready) {
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Getting your files ready…";
+    try {
+      const list = await api(`/api/download-list?slug=${encodeURIComponent(slug)}`);
+      if (!list.ok || !list.body.files?.length) throw new Error(list.body.error || "No files to download yet.");
+      const mb = list.body.files.reduce((t, f) => t + (f.size || 0), 0) / 1e6;
+      const size = mb >= 1000 ? `${(mb / 1000).toFixed(1)} GB` : `${Math.max(1, Math.round(mb))} MB`;
+      if (await zipWorkerReady()) {
+        openHidden(`/zip/${encodeURIComponent(slug)}/${encodeURIComponent(list.body.zipName)}`);
+        toast(`Downloading one zip file (${list.body.files.length} files, ${size}). Your browser shows the progress; keep this page open until it finishes.`, 10000);
+      } else {
+        toast(`Starting ${ready.length} downloads. If your browser asks to allow multiple downloads, choose Allow.`, 8000);
+        for (const [n, id] of ready.entries()) {
+          btn.textContent = `Starting ${n + 1} of ${ready.length}…`;
+          openHidden(`/dl/${encodeURIComponent(slug)}/${encodeURIComponent(id)}`);
+          await new Promise((r) => setTimeout(r, 1500));
+        }
       }
-      all.disabled = false;
-    });
+    } catch (err) {
+      toast(err.message || "Couldn't start the download. Please try again.", 8000);
+    }
+    btn.textContent = label;
+    btn.disabled = false;
+  }
+
+  // A hidden frame: the response is an attachment, so the browser saves it and the page stays put.
+  function openHidden(src) {
+    const f = document.createElement("iframe");
+    f.hidden = true;
+    f.src = src;
+    document.body.appendChild(f);
+    setTimeout(() => f.remove(), 120000);
+  }
+
+  async function zipWorkerReady() {
+    if (!("serviceWorker" in navigator) || !window.ReadableStream) return false;
+    try {
+      const reg = await navigator.serviceWorker.register("/zip-sw.js", { scope: "/zip/" });
+      const sw = reg.active || reg.waiting || reg.installing;
+      if (!sw) return false;
+      if (sw.state !== "activated") {
+        await new Promise((resolve, reject) => {
+          const t = setTimeout(() => reject(new Error("timeout")), 10000);
+          sw.addEventListener("statechange", () => {
+            if (sw.state === "activated") { clearTimeout(t); resolve(); }
+            if (sw.state === "redundant") { clearTimeout(t); reject(new Error("redundant")); }
+          });
+        });
+      }
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   function setTab(t) { tab = t; render(); window.scrollTo({ top: $("tabs").offsetTop - 10, behavior: "smooth" }); }

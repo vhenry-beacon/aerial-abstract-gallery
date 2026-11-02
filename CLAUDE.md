@@ -8,6 +8,8 @@ The owner is Vernon Henry, who is non-technical about infrastructure. **Do the w
 - Static frontend in `public/`: gallery at `/g/<slug>` (`public/g/index.html` + `assets/gallery.js`), admin at `/admin`, review studio at `/admin/studio/` (`assets/studio.js`).
 - `netlify/functions/api.mts`: all `/api/*` routes (login, gallery, select, checkout, confirm, stripe-webhook, admin/*).
 - `netlify/edge-functions/download.ts`: `/dl/:slug/:id` checks the purchase, then redirects to a signed R2 URL (or streams from Netlify Blobs if R2 isn't configured).
+  Files download with friendly names from `downloadName()` in lib/core.mjs ("Fall Festival Clip 1.mp4", "Fall Festival Aerial Photo 3.jpg").
+- "Download all" = one zip built in the browser: `public/zip-sw.js` (service worker, scope /zip/, client-zip 2.5.1 in public/assets/vendor, sha512-verified) reads `/api/download-list` (purchased files, names, sizes, 6-hour R2 links) and streams a zip (zip64 when needed) with an exact Content-Length. Falls back to one file at a time without service workers. The in-app browser pane blocks service workers; test with headless Chrome. R2 CORS must include the site's origin (add a custom domain there if one is added).
 - `lib/core.mjs`: auth (HMAC cookies), state in Netlify Blobs, server-side pricing (`quote`), order fulfillment, Stripe REST, R2 signing (aws4fetch).
 - `clients/<slug>/client.json` + `manifest.json`: per-client config; `tools/build-registry.mjs` bundles them at build time (`npm run build`).
 - `tools/*.py`: media pipeline (photos, scene clips, highlight reel, watermark, manifest) and `tools/studio.py`, which renders Keri's studio requests. Requires ffmpeg, Pillow, pillow-heif, numpy.

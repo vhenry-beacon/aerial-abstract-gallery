@@ -3,7 +3,7 @@ import {
   getClient, listClients, getState, saveState, quote, fulfillOrder, saveOrder, getOrder, listOrders,
   json, signToken, cookieName, setCookieHeader, isClientAuthed, isAdmin, checkAdminPassword, sha256Hex,
   fileStore, PART_SIZE, stripe, stripeKey, verifyStripeSignature, siteUrl,
-  r2, r2Key, r2Presign, r2Head, storageMode,
+  r2, r2Key, r2Presign, r2Head, storageMode, downloadName, zipName,
   r2List, r2MultipartStart, r2PartUrl, r2MultipartParts, r2MultipartComplete, r2MultipartAbort,
   getReview, saveReview, clientCanSee, REVIEW_STATUSES,
   editWaiting, reelWaiting, noteWaiting, getProject, saveProject, listProjects, PROJECT_STATUSES, getWorker, setWorker,
@@ -238,6 +238,30 @@ export default async (req: Request, context: Context) => {
       order.stripeSessionId = session.id;
       await saveOrder(order);
       return json({ url: session.url });
+    }
+
+    // Every purchased, ready file with its friendly name, size and a 6-hour link: feeds the "Download all" zip
+    // (public/zip-sw.js builds the zip in the browser, so nothing large runs on the server).
+    if (route === "download-list" && m === "GET") {
+      const client = getClient(url.searchParams.get("slug"));
+      if (!client) return bad("Gallery not found", 404);
+      if (!(await isClientAuthed(req, client.slug))) return bad("Please sign in", 401);
+      const state = await getState(client);
+      const metas = await fileMetas(client.slug);
+      const files: any[] = [];
+      const used = new Set<string>();
+      for (const item of client.items) {
+        const meta = metas[item.id];
+        if (!state.purchased[item.id] || !meta) continue;
+        let name = downloadName(client, item, meta.filename);
+        for (let n = 2; used.has(name.toLowerCase()); n++) name = name.replace(/( \(\d+\))?(\.\w+)$/, ` (${n})$2`);
+        used.add(name.toLowerCase());
+        const link = meta.storage === "r2" && r2()
+          ? await r2Presign("GET", r2Key(client.slug, item.id), 6 * 3600)
+          : `/dl/${encodeURIComponent(client.slug)}/${encodeURIComponent(item.id)}`;
+        files.push({ id: item.id, name, size: meta.size || null, url: link });
+      }
+      return json({ zipName: zipName(client), files });
     }
 
     if (route === "confirm" && m === "GET") {

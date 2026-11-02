@@ -1,7 +1,7 @@
 // Streams a full-resolution file to the client, only if it has been purchased
 // (or the requester is signed in as admin). Files are stored as 4 MB chunks in Blobs.
 import type { Config, Context } from "@netlify/edge-functions";
-import { getClient, getState, isClientAuthed, isAdmin, fileStore, r2, r2Key, r2Presign } from "../../lib/core.mjs";
+import { getClient, getState, isClientAuthed, isAdmin, fileStore, r2, r2Key, r2Presign, downloadName } from "../../lib/core.mjs";
 
 export default async (req: Request, context: Context) => {
   const { slug, id } = context.params as { slug: string; id: string };
@@ -18,12 +18,14 @@ export default async (req: Request, context: Context) => {
   const store = fileStore();
   const meta: any = await store.get(`meta/${slug}/${id}`, { type: "json" });
   if (!meta) return new Response("This file is still being prepared. Check back soon.", { status: 404 });
+  const item = client.items.find((i: any) => i.id === id) || { id };
+  const name = downloadName(client, item, meta.filename);
+  const disposition = `attachment; filename="${name.replace(/[^\x20-\x7e]/g, "_").replace(/"/g, "")}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 
   if (meta.storage === "r2" && r2()) {
     // Hand the browser a 10-minute signed link straight to Cloudflare R2 (no size limits, no egress fees).
-    const safe = String(meta.filename).replace(/"/g, "");
     const url = await r2Presign("GET", r2Key(slug, id), 600, {
-      "response-content-disposition": `attachment; filename="${safe}"`,
+      "response-content-disposition": disposition,
       "response-content-type": meta.contentType || "application/octet-stream",
     });
     return new Response(null, { status: 302, headers: { location: url, "cache-control": "private, no-store" } });
@@ -42,7 +44,7 @@ export default async (req: Request, context: Context) => {
 
   const headers: Record<string, string> = {
     "content-type": meta.contentType || "application/octet-stream",
-    "content-disposition": `attachment; filename="${String(meta.filename).replace(/"/g, "")}"`,
+    "content-disposition": disposition,
     "cache-control": "private, no-store",
   };
   if (meta.size) headers["content-length"] = String(meta.size);
