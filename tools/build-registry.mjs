@@ -15,6 +15,8 @@ for (const slug of readdirSync(clientsDir)) {
   const manPath = join(clientsDir, slug, "manifest.json");
   const manifest = existsSync(manPath) ? JSON.parse(readFileSync(manPath, "utf8")) : { items: [] };
   if (client.slug !== slug) throw new Error(`client.json slug "${client.slug}" must match folder "${slug}"`);
+  // Galleries made for trying things out ("testOnly": true) exist only on the test site.
+  if (client.testOnly && process.env.GALLERY_ENV !== "staging") continue;
   const ids = new Set();
   for (const it of manifest.items) {
     if (ids.has(it.id)) throw new Error(`${slug}: duplicate item id ${it.id}`);

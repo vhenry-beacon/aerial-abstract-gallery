@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node tools/build-registry.mjs"
+    "build": "node tools/build-registry.mjs",
+    "deploy:test": "bash tools/deploy.sh test",
+    "deploy:live": "bash tools/deploy.sh live"
   },
   "dependencies": {
     "@netlify/blobs": "^8.2.0",

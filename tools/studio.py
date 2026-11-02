@@ -17,6 +17,8 @@ full/<slug>/<id> the first time an item is edited). Results:
 After rendering, rebuild and deploy the site (previews and manifest changed) and commit.
 
 Credentials: ADMIN_PASSWORD and R2_* from the environment, else read with `netlify env:get`.
+Test site: GALLERY_ENV=staging points every tool (and the netlify commands it runs) at aerial-abstract-staging,
+with its own data and R2 bucket. Without it, everything goes to the live site.
 Requires ffmpeg, Pillow, numpy (use the project's .venv).
 """
 import argparse, datetime, hashlib, hmac, http.client, json, os, subprocess, sys, tempfile, time, urllib.parse, urllib.request
@@ -28,7 +30,12 @@ sys.path.insert(0, HERE)
 from looks import look_filter  # noqa: E402
 from watermark import watermark_overlay  # noqa: E402
 
-SITE = os.environ.get("GALLERY_SITE", "https://aerial-abstract-gallery.netlify.app")
+STAGING_SITE_ID = "a61362b4-0ff1-441d-9d18-1e819e744bbf"
+STAGING = os.environ.get("GALLERY_ENV") == "staging"
+if STAGING:
+    os.environ["NETLIFY_SITE_ID"] = STAGING_SITE_ID  # env:get and deploy now talk to the test site
+SITE = os.environ.get("GALLERY_SITE") or ("https://aerial-abstract-staging.netlify.app" if STAGING
+                                          else "https://aerial-abstract-gallery.netlify.app")
 SMOOTH = "minterpolate=fps=30000/1001:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1"
 TITLE_FONT = ("/System/Library/Fonts/Supplemental/Didot.ttc", 0)
 LABEL_FONT = ("/System/Library/Fonts/Avenir Next.ttc", 2)  # Demi Bold
