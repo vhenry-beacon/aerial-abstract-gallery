@@ -38,6 +38,93 @@
       "fullFile": "mashup-03.mp4",
       "preview": "/media/new-test-project/mashup-03.mp4",
       "poster": "/media/new-test-project/mashup-03.jpg"
+    },
+    {
+      "id": "photo-01",
+      "type": "photo",
+      "title": "Aerial photo 1",
+      "category": "aerial",
+      "orientation": "landscape",
+      "width": 3840,
+      "height": 2160,
+      "source": "DJI_20261031190638_0030_D.JPG",
+      "fullFile": "photo-01.jpg",
+      "rawKey": "Drone Photos/DJI_20261031190638_0030_D.JPG",
+      "preview": "/media/new-test-project/photo-01.jpg?v=1"
+    },
+    {
+      "id": "photo-02",
+      "type": "photo",
+      "title": "Aerial photo 2",
+      "category": "aerial",
+      "orientation": "landscape",
+      "width": 4096,
+      "height": 3072,
+      "source": "DJI_20261101053506_0061_D.JPG",
+      "fullFile": "photo-02.jpg",
+      "rawKey": "Drone Photos/DJI_20261101053506_0061_D.JPG",
+      "preview": "/media/new-test-project/photo-02.jpg?v=1"
+    },
+    {
+      "id": "photo-03",
+      "type": "photo",
+      "title": "Aerial photo 3",
+      "category": "aerial",
+      "orientation": "landscape",
+      "width": 4000,
+      "height": 3000,
+      "source": "DJI_20261101071224_0149_D.JPG",
+      "fullFile": "photo-03.jpg",
+      "rawKey": "Drone Photos/DJI_20261101071224_0149_D.JPG",
+      "preview": "/media/new-test-project/photo-03.jpg?v=1"
+    },
+    {
+      "id": "photo-04",
+      "type": "photo",
+      "title": "Ground photo 1",
+      "category": "ground",
+      "orientation": "portrait",
+      "width": 3213,
+      "height": 5712,
+      "source": "IMG_4363.HEIC",
+      "fullFile": "photo-04.jpg",
+      "rawKey": "Osmo Ground/IMG_4363.HEIC",
+      "preview": "/media/new-test-project/photo-04.jpg?v=1"
+    },
+    {
+      "id": "photo-05",
+      "type": "photo",
+      "title": "Ground photo 2",
+      "category": "ground",
+      "orientation": "portrait",
+      "width": 3213,
+      "height": 5712,
+      "source": "IMG_4365.HEIC",
+      "fullFile": "photo-05.jpg",
+      "rawKey": "Osmo Ground/IMG_4365.HEIC",
+      "preview": "/media/new-test-project/photo-05.jpg?v=1"
+    },
+    {
+      "id": "clip-01",
+      "type": "video",
+      "title": "Clip 01",
+      "category": "aerial",
+      "duration": 10.55,
+      "orientation": "portrait",
+      "width": 1080,
+      "height": 1920,
+      "source": "DJI_20261031190536_0029_D.MP4",
+      "rawKey": "Drone Horizontal/DJI_20261031190536_0029_D.MP4",
+      "sourceStart": 0.0,
+      "sourceEnd": 10.552,
+      "sourceFrames": [
+        0,
+        253
+      ],
+      "fullFile": "clip-01.mp4",
+      "preview": "/media/new-test-project/clip-01.mp4?v=1",
+      "poster": "/media/new-test-project/clip-01.jpg?v=1"
     }
-  ]
+  ],
+  "rawSkipped": []
 }
