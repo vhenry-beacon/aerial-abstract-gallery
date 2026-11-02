@@ -72,14 +72,14 @@
       "sourceStart": 34.935,
       "sourceEnd": 41.942,
       "fullFile": "clip-05.mp4",
-      "preview": "/media/river-oaks/clip-05.mp4",
-      "poster": "/media/river-oaks/clip-05.jpg"
+      "preview": "/media/river-oaks/clip-05.mp4?v=1",
+      "poster": "/media/river-oaks/clip-05.jpg?v=1"
     },
     {
       "id": "clip-06",
       "type": "video",
       "title": "Clip 06",
-      "duration": 5.71,
+      "duration": 5.74,
       "orientation": "portrait",
       "width": 2160,
       "height": 3840,
@@ -87,8 +87,8 @@
       "sourceStart": 41.942,
       "sourceEnd": 47.648,
       "fullFile": "clip-06.mp4",
-      "preview": "/media/river-oaks/clip-06.mp4",
-      "poster": "/media/river-oaks/clip-06.jpg"
+      "preview": "/media/river-oaks/clip-06.mp4?v=1",
+      "poster": "/media/river-oaks/clip-06.jpg?v=1"
     },
     {
       "id": "clip-07",
@@ -187,7 +187,7 @@
       "height": 3072,
       "source": "DJI_20261101055327_0085_D.JPG",
       "fullFile": "photo-02.jpg",
-      "preview": "/media/river-oaks/photo-02.jpg"
+      "preview": "/media/river-oaks/photo-02.jpg?v=1"
     },
     {
       "id": "photo-03",
@@ -259,7 +259,7 @@
       "height": 3000,
       "source": "DJI_20261101071224_0149_D.JPG",
       "fullFile": "photo-08.jpg",
-      "preview": "/media/river-oaks/photo-08.jpg"
+      "preview": "/media/river-oaks/photo-08.jpg?v=1"
     },
     {
       "id": "photo-09",
@@ -283,7 +283,7 @@
       "height": 3000,
       "source": "DJI_20261101071540_0158_D.JPG",
       "fullFile": "photo-10.jpg",
-      "preview": "/media/river-oaks/photo-10.jpg"
+      "preview": "/media/river-oaks/photo-10.jpg?v=1"
     },
     {
       "id": "photo-11",
@@ -331,7 +331,7 @@
       "height": 2160,
       "source": "DJI_20261031190638_0030_D.JPG",
       "fullFile": "photo-14.jpg",
-      "preview": "/media/river-oaks/photo-14.jpg"
+      "preview": "/media/river-oaks/photo-14.jpg?v=1"
     },
     {
       "id": "photo-15",
@@ -379,7 +379,7 @@
       "height": 5712,
       "source": "IMG_4363.HEIC",
       "fullFile": "photo-18.jpg",
-      "preview": "/media/river-oaks/photo-18.jpg"
+      "preview": "/media/river-oaks/photo-18.jpg?v=1"
     },
     {
       "id": "photo-19",
