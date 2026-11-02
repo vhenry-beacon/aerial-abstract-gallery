@@ -81,7 +81,7 @@ window.RawUploader = (opts) => {
     const total = queue.reduce((a, x) => a + x.file.size, 0), done = queue.reduce((a, x) => a + x.done, 0);
     const left = queue.filter((x) => !["done", "already there"].includes(x.state) && !x.state.startsWith("failed")).length;
     const failed = queue.filter((x) => x.state.startsWith("failed")).length;
-    overall.innerHTML = queue.length ? `<div class="st-overall">${left ? `Uploading: ${queue.length - left} of ${queue.length} files` : `<b>All done.</b> ${queue.length - failed} of ${queue.length} files are in the cloud`}${failed ? ` · <span class="err">${failed} failed (drop them again to retry)</span>` : ""}
+    overall.innerHTML = queue.length ? `<div class="st-overall">${left ? `Uploading: ${queue.length - left} of ${queue.length} files` : `<b>All done.</b> ${queue.length - failed} of ${queue.length} files are in the cloud. Before deleting them from your drive, use “Check my drive” below`}${failed ? ` · <span class="err">${failed} failed (drop them again to retry)</span>` : ""}
       · ${mb(done)} of ${mb(total)}<div class="st-bar"><span style="width:${total ? (done / total) * 100 : 0}%"></span></div></div>` : "";
   }
 
@@ -122,7 +122,7 @@ window.RawUploader = (opts) => {
       if (r.ok) for (const p of r.body.parts) have[p.n] = p; else uploadId = null;
     }
     if (!uploadId) {
-      const s = await api("/api/admin/raw/start", { path: x.path, size: f.size, type: f.type });
+      const s = await api("/api/admin/raw/start", { path: x.path, size: f.size, type: f.type, replace: !!x.replace });
       if (!s.ok) throw new Error(s.body.error || "couldn't start");
       if (s.body.done) { x.done = f.size; return show(x, "already there", 100); }
       if (s.body.url) {
@@ -166,5 +166,6 @@ window.RawUploader = (opts) => {
   }
 
   listCloud();
-  return { refresh: listCloud, busy: () => uploading > 0 };
+  // replace: upload again even if a file of the same size is already there (the drive check found it differs)
+  return { refresh: listCloud, busy: () => uploading > 0, add: (items, replace) => enqueue(items.map((x) => ({ ...x, replace }))) };
 };

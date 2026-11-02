@@ -67,7 +67,7 @@ def cmd_show(a):
 
 
 def cmd_fetch(a):
-    set_status(a.id, "working", "Downloading your files to Vernon's Mac")
+    set_status(a.id, "working", "Downloading your files from the cloud")
     r2 = studio.R2()
     files = r2.list(f"raw/{a.id}/")
     for f in files:

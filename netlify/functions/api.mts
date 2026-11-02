@@ -136,7 +136,7 @@ async function projectSummary(p: any, rawFolders: Set<string>) {
   } else if (p.sentToClaudeAt) status = "claude";
   else if (rawFolders.has(p.id)) status = "files";
   // "With Claude" tiles say which part: waiting to be picked up, working, or stuck on a question for Keri
-  const cs = status === "claude" ? p.claudeState?.state : null;
+  const cs = status === "claude" || ["waiting", "working", "problem"].includes(p.claudeState?.state) ? p.claudeState?.state : null;
   const label = PROJECT_STATUSES[(cs && cs !== "ready" ? cs : status) as keyof typeof PROJECT_STATUSES];
   return { ...p, accessCode: undefined, status, statusLabel: label, cover, counts, hasFiles: rawFolders.has(p.id) };
 }
@@ -350,7 +350,7 @@ export default async (req: Request, context: Context) => {
         if (route === "admin/raw/start" && m === "POST") {
           const size = Number(body.size) || 0;
           const existing = await r2Head(key);
-          if (existing && existing.size === size) return json({ key, done: true });
+          if (existing && existing.size === size && !body.replace) return json({ key, done: true });
           if (size <= 64 * 1024 * 1024) return json({ key, url: await r2Presign("PUT", key, 3600) });
           return json({ key, uploadId: await r2MultipartStart(key, body.type) });
         }

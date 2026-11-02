@@ -56,6 +56,25 @@ def classify(path: str, im: Image.Image) -> str:
     return "ground"
 
 
+def make_photo(f, im, pid, kind, number, full_dir, preview_dir, do_enhance=True):
+    """Write the full-quality JPEG and the watermarked preview for one photo; return its manifest item."""
+    full = enhance(im) if do_enhance else im
+    exif = Image.open(f).info.get("exif") if not f.lower().endswith(".heic") else None
+    full.save(os.path.join(full_dir, f"{pid}.jpg"), "JPEG", quality=94, subsampling=0, **({"exif": exif} if exif else {}))
+    pv = full.copy()
+    pv.thumbnail((PREVIEW_LONG_EDGE, PREVIEW_LONG_EDGE), Image.LANCZOS)
+    pv = Image.alpha_composite(pv.convert("RGBA"), watermark_overlay(pv.width, pv.height)).convert("RGB")
+    pv.save(os.path.join(preview_dir, f"{pid}.jpg"), "JPEG", quality=72, progressive=True)
+    return {
+        "id": pid, "type": "photo",
+        "title": f"{'Aerial' if kind == 'aerial' else 'Ground'} photo {number}",
+        "category": kind,
+        "orientation": "portrait" if full.height > full.width else "landscape",
+        "width": full.width, "height": full.height,
+        "source": os.path.basename(f), "fullFile": f"{pid}.jpg",
+    }
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", required=True)
@@ -82,24 +101,7 @@ def main():
     for n, (kind, f, im) in enumerate(loaded, 1):
         counters[kind] += 1
         pid = f"photo-{n:02d}"
-        full = im if args.no_enhance else enhance(im)
-        full_path = os.path.join(args.full, f"{pid}.jpg")
-        exif = Image.open(f).info.get("exif") if not f.lower().endswith(".heic") else None
-        full.save(full_path, "JPEG", quality=94, subsampling=0, **({"exif": exif} if exif else {}))
-
-        pv = full.copy()
-        pv.thumbnail((PREVIEW_LONG_EDGE, PREVIEW_LONG_EDGE), Image.LANCZOS)
-        pv = Image.alpha_composite(pv.convert("RGBA"), watermark_overlay(pv.width, pv.height)).convert("RGB")
-        pv.save(os.path.join(args.preview, f"{pid}.jpg"), "JPEG", quality=72, progressive=True)
-
-        items.append({
-            "id": pid, "type": "photo",
-            "title": f"{'Aerial' if kind == 'aerial' else 'Ground'} photo {counters[kind]}",
-            "category": kind,
-            "orientation": "portrait" if full.height > full.width else "landscape",
-            "width": full.width, "height": full.height,
-            "source": os.path.basename(f), "fullFile": f"{pid}.jpg",
-        })
+        items.append(make_photo(f, im, pid, kind, counters[kind], args.full, args.preview, not args.no_enhance))
         print(f"  {pid}  {kind:6s}  {os.path.basename(f)}", file=sys.stderr)
     json.dump(items, sys.stdout, indent=2)
 

@@ -149,6 +149,13 @@ npm run build && netlify deploy --prod --build            # previews and manifes
 - The full-quality reel is uploaded to the gallery **only when `--music` is given** (a licensed track). Without music, only the preview is updated.
 - One-time setup on a new Mac: `python3 -m venv .venv && .venv/bin/pip install pillow numpy pillow-heif` (ffmpeg via Homebrew).
 
+### 8c. Adding more photos or video later
+Keri uploads only the new folders on the project page (named *Drone Vertical*, *Drone Horizontal*, *Osmo Ground* or *Photos*), writes what she wants in the box under "Add to this gallery or ask for more" (for example "Add these. 5 horizontal clips from the landscape video, sunset and crowd"), and presses **Send to Claude**.
+Claude runs `tools/add_to_project.py plan --id <project>` to see what's new, then `run` (with `--pick` for hand-chosen moments in long footage, `--look` to override the house look). New items continue the numbering and arrive in the studio as not reviewed; existing items, approvals, edits and purchases are untouched.
+
+### 8d. Clearing the drive
+On the project page, **Check my drive**: Keri picks the shoot folder on her drive; every file is compared with its cloud copy byte for byte. Only "✅ Safe to delete" means the drive copy can go.
+
 ### 9. Send the client their link
 Email the client:
 > Your Fall Festival gallery is ready: https://aerial-abstract-gallery.netlify.app/g/<slug>

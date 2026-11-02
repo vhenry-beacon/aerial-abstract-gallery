@@ -72,11 +72,15 @@ button { font: inherit; cursor: pointer; }
 .grid { display: grid; gap: 12px; margin-bottom: 36px; }
 .grid.clips { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
 .grid.photos { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
-@media (max-width: 560px) { .grid.clips { grid-template-columns: repeat(2, 1fr); } .grid.photos { grid-template-columns: repeat(2, 1fr); gap: 8px; } }
+.grid.wide { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.sub-h { display: flex; align-items: baseline; gap: 10px; margin: 4px 0 10px; font-size: 15px; }
+.sub-h span { color: var(--ink-3); font-size: 13px; }
+@media (max-width: 560px) { .grid.clips { grid-template-columns: repeat(2, 1fr); } .grid.wide { grid-template-columns: 1fr; } .grid.photos { grid-template-columns: repeat(2, 1fr); gap: 8px; } }
 
 .card { position: relative; border-radius: 12px; overflow: hidden; background: #0d0f10; box-shadow: var(--shadow); outline: 3px solid transparent; outline-offset: -3px; transition: outline-color .15s, transform .15s; }
 .card .media { display: block; width: 100%; object-fit: cover; cursor: zoom-in; user-select: none; -webkit-user-drag: none; }
 .clips .card .media { aspect-ratio: 9/16; }
+.wide .card .media { aspect-ratio: 16/9; }
 .photos .card .media { aspect-ratio: 4/3; }
 .card.sel { outline-color: var(--gold); }
 .card.owned { outline-color: var(--accent); }

@@ -284,7 +284,8 @@ def render_photo(src, edit, out, prev_jpg):
     pv.save(prev_jpg, "JPEG", quality=72, progressive=True)
 
 
-def render_items(site, r2, data, ids, cache):
+def render_items(site, r2, data, ids, cache, announce=True):
+    """announce=False (house look on newly added items): record the render without marking them revised or adding a note."""
     review, items = data["review"], {i["id"]: i for i in data["items"]}
     man = json.load(open(manifest_path(site.slug)))
     media = os.path.join(ROOT, "public", "media", site.slug)
@@ -314,8 +315,11 @@ def render_items(site, r2, data, ids, cache):
                 if it["type"] == "video":
                     m["poster"] = ver_url(m["poster"], version)
                     m["duration"] = round(info["dur"], 2)
-        site.post({"id": iid, "status": "revised", "version": version, "rendered": edit,
-                   "note": {"text": f"Updated: {describe(edit, it)}. Take a look and approve it, or leave another note."}})
+        if announce:
+            site.post({"id": iid, "status": "revised", "version": version, "rendered": edit,
+                       "note": {"text": f"Updated: {describe(edit, it)}. Take a look and approve it, or leave another note."}})
+        else:
+            site.post({"id": iid, "version": version, "rendered": edit})
         log(f"   done: {size / 1e6:.1f} MB uploaded, preview v{version}")
         done.append(iid)
     json.dump(man, open(manifest_path(site.slug), "w"), indent=2)
@@ -494,7 +498,8 @@ def alert_new_projects(site):
     """Keri pressed "Send to Claude": pop up a notification on this Mac (once per send) and tell her page it was seen."""
     for p in site.call("GET", "/api/admin/projects", slug=False)["projects"]:
         cs = p.get("claudeState") or {}
-        if p.get("status") != "claude" or cs.get("state", "waiting") != "waiting" or cs.get("macAlertedAt"):
+        waiting = cs.get("state") == "waiting" or (not cs and p.get("status") == "claude")
+        if not waiting or cs.get("macAlertedAt"):
             continue
         msg = f"Keri sent \"{p['name']}\" to Claude. Open Claude and say: work on Keri's waiting projects."
         subprocess.run(["osascript", "-e", f"display notification {json.dumps(msg)} with title \"Aerial Abstract\" sound name \"Glass\""])

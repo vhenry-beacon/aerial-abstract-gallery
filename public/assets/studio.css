@@ -141,6 +141,10 @@ table.t { width: 100%; border-collapse: collapse; font-size: 13px; background: v
 .pill.pj-quote { background: var(--line); color: var(--ink-2); }
 .pill.pj-files { background: #3a6fb0; color: #fff; }
 .pill.pj-claude { background: #6b5bd2; color: #fff; }
+.pj-sub { font-size: 15px; margin: 14px 0 6px; }
+.pj-drivecheck { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 12px; }
+.pj-drivecheck p { margin: 4px 0 8px; }
+.pj-checklist { margin: 4px 0 10px; padding-left: 18px; font-size: 13px; max-height: 180px; overflow: auto; }
 .pj-cstate { border: 1px solid var(--line); border-left: 4px solid #6b5bd2; border-radius: 12px; padding: 10px 14px; margin: 0 0 12px; background: var(--surface); }
 .pj-cstate > b { display: block; font-size: 15px; margin-bottom: 2px; }
 .pj-cstate p { margin: 4px 0; }

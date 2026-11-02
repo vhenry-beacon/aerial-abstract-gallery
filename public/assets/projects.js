@@ -83,6 +83,7 @@
       list: $("upList"), overall: $("upOverall"), cloud: $("cloudFiles"), cloudSum: $("cloudSum"),
       onList: (files) => { if (files.length && !P.hasFiles) { P.hasFiles = true; refreshStatus(); } },
     });
+    window.DriveCheck({ project: P.id, input: $("checkDrive"), out: $("checkOut"), reupload: uploader.add });
     // keep the Claude status card current while the page is open
     setInterval(() => { if (!document.hidden && JSON.stringify(formData()) === saved) refreshStatus(); }, 60000);
   }
@@ -171,7 +172,7 @@
     const macOff = !W || Date.now() - new Date(W.at) > 40 * 60000;
     const card = (icon, cls, title, body) => `<div class="pj-cstate ${cls}"><b>${icon} ${title}</b>${body}</div>`;
     if (s.state === "working") return card("🛠", "working", "Claude is working on this", `<p>${esc(s.text || "Cutting and editing your files.")} <span class="st-muted">(updated ${ago(s.at)})</span></p>
-      <p class="st-muted st-small">When it's done, the gallery appears here and in the review studio. Nothing for you to do yet.</p>`);
+      <p class="st-muted st-small">${P.gallerySlug ? "When it's done, the new items appear in the review studio, marked not reviewed." : "When it's done, the gallery appears here and in the review studio."} Nothing for you to do yet.</p>`);
     if (s.state === "problem") return card("⚠️", "problem", "Claude needs you", `<p>${esc(s.text || "Claude has a question; see its note below.")}</p>
       <p class="st-muted st-small">Change the quote, instructions or files as needed, then press Send to Claude again.</p>`);
     if (s.state === "ready") return P.gallerySlug ? card("✅", "ready", "Ready for your review", `<p>Claude finished ${ago(s.at)}. Open the review studio to check each item.</p>`) : "";
@@ -191,13 +192,18 @@
       ${P.accessCode ? `<br><b>Access code:</b> <code>${esc(P.accessCode)}</code>` : ""}</p>
       <p class="st-muted st-small">Review everything in the studio and publish when it's ready. Then send the client the link and code.</p>` : "";
     $("claudeBox").innerHTML = `${P.claudeState?.state === "ready" ? claudeStatus() : ""}${gallery}${notes ? `<div class="st-notes">${notes}</div>` : ""}
-      ${P.gallerySlug ? "" : `<textarea class="field" id="sendNote" placeholder="Anything else Claude should know (optional)"></textarea>
+      ${P.gallerySlug ? `<h3 class="pj-sub">Add to this gallery or ask for more</h3>
+      <textarea class="field" id="sendNote" placeholder="e.g. Add the new uploads. Make 5 horizontal clips from the long landscape video, 10–15 seconds, sunset and crowd shots, same warm look."></textarea>
+      <button class="btn" id="sendBtn" type="button">Send to Claude</button>
+      <p class="st-muted st-small">Upload the new files above first. Claude adds only what's new: everything already in the gallery, with your approvals and edits, stays as it is.</p>`
+      : `<textarea class="field" id="sendNote" placeholder="Anything else Claude should know (optional)"></textarea>
       <button class="btn" id="sendBtn" type="button">${P.sentToClaudeAt ? "Send to Claude again" : "Send to Claude"}</button>
       <p class="st-muted st-small">Claude reads the quote, the instructions and the files, then cuts the clips, edits the photos and builds the client gallery. The card above shows where it stands.</p>`}`;
     const b = $("sendBtn");
     if (b) b.onclick = async () => {
       if (JSON.stringify(formData()) !== saved && !(await saveProject())) return;
       if (!P.hasFiles && !confirm("No files are uploaded yet. Send to Claude anyway?")) return;
+      if (P.gallerySlug && !$("sendNote").value.trim()) { alert("Tell Claude what to do, e.g. “Add the new uploads.”"); return; }
       const r = await api("/api/admin/project", { id: P.id, send: true, sentNote: $("sendNote").value });
       if (!r.ok) return alert(r.body.error || "Couldn't send");
       P = { ...P, ...r.body.project }; renderHead(); renderClaude();

@@ -100,7 +100,32 @@
     $("howExtra").textContent = `Want more? Every pick beyond ${c.package.included} is ${money(c.extraPrice)}.`;
   }
 
-  const items = () => data.items.filter((i) => !i.upsellOnly);
+  // Sections, in display order. Ground = Osmo/handheld footage; the rest is from the drone.
+  const GROUPS = [
+    ["vertical", "Vertical clips", "9:16", "clips"], ["wide", "Horizontal clips", "16:9", "wide"], ["ground", "Ground clips", "", "clips"],
+    ["aerial", "Aerial photos", "", "photos"], ["groundPhoto", "Ground photos", "", "photos"],
+  ];
+  const groupOf = (it) => it.type === "photo" ? (it.category === "ground" ? "groundPhoto" : "aerial")
+    : it.category === "ground" ? "ground" : it.orientation === "landscape" ? "wide" : "vertical";
+  const rank = Object.fromEntries(GROUPS.map((g, k) => [g[0], k]));
+  // manifest order within each section; sections in GROUPS order (the lightbox follows the same order)
+  const ordered = (list) => list.map((it, k) => [it, k]).sort((a, b) => rank[groupOf(a[0])] - rank[groupOf(b[0])] || a[1] - b[1]).map((x) => x[0]);
+  const items = () => ordered(data.items.filter((i) => !i.upsellOnly));
+  // fill a section with one grid per kind; a subheading only when the section holds more than one kind
+  function fillGroups(box, list) {
+    const used = GROUPS.filter((g) => list.some((it) => groupOf(it) === g[0]));
+    box.replaceChildren(...used.flatMap(([key, label, shape, cls]) => {
+      const these = list.filter((it) => groupOf(it) === key);
+      const grid = document.createElement("div");
+      grid.className = `grid ${cls}`;
+      grid.replaceChildren(...these.map(card));
+      if (used.length < 2) return [grid];
+      const h = document.createElement("div");
+      h.className = "sub-h";
+      h.innerHTML = `<b>${label}</b><span>${these.length}${shape ? " · " + shape : ""}</span>`;
+      return [h, grid];
+    }));
+  }
   const isOwned = (id) => !!data.state.purchased[id];
   const isPicked = (id) => data.state.selected.includes(id);
 
@@ -194,9 +219,10 @@
     const showClips = tab === "all" || tab === "clips" || tab === "picked";
     const showPhotos = tab === "all" || tab === "photos" || tab === "picked";
     const vc = visible(clips), vp = visible(photos);
-    $("clipsGrid").replaceChildren(...vc.map(card));
-    $("photosGrid").replaceChildren(...vp.map(card));
-    $("clipsCount").textContent = `${vc.length} clip${vc.length === 1 ? "" : "s"} · 9:16 vertical`;
+    fillGroups($("clipsGrid"), vc);
+    fillGroups($("photosGrid"), vp);
+    const shapes = new Set(vc.map((i) => i.orientation === "landscape" ? "16:9 horizontal" : "9:16 vertical"));
+    $("clipsCount").textContent = `${vc.length} clip${vc.length === 1 ? "" : "s"}${shapes.size === 1 ? " · " + [...shapes][0] : ""}`;
     $("photosCount").textContent = `${vp.length} photo${vp.length === 1 ? "" : "s"}`;
     $("clipsSection").classList.toggle("hidden", tab === "owned" || !showClips || !vc.length);
     $("photosSection").classList.toggle("hidden", tab === "owned" || !showPhotos || !vp.length);
@@ -257,11 +283,11 @@
     panel.innerHTML = `
       <div class="section-h"><h2>My files</h2><span>${ids.length} file${ids.length > 1 ? "s" : ""} · full resolution</span></div>
       ${ready.length > 1 ? `<button class="btn" id="dlAll" type="button" style="margin-bottom:16px">Download all as one zip (${ready.length} files)</button>` : ""}
-      <div class="grid clips" id="ownedClips"></div>
-      <div class="grid photos" id="ownedPhotos"></div>`;
-    const owned = ids.map((id) => byId[id]).filter(Boolean);
-    $("ownedClips").replaceChildren(...owned.filter((i) => i.type === "video" && !i.upsellOnly).map(card));
-    $("ownedPhotos").replaceChildren(...owned.filter((i) => i.type === "photo").map(card));
+      <div id="ownedClips"></div>
+      <div id="ownedPhotos"></div>`;
+    const owned = ordered(ids.map((id) => byId[id]).filter(Boolean));
+    fillGroups($("ownedClips"), owned.filter((i) => i.type === "video" && !i.upsellOnly));
+    fillGroups($("ownedPhotos"), owned.filter((i) => i.type === "photo"));
     const reel = owned.find((i) => i.upsellOnly);
     if (reel) {
       const row = document.createElement("p");
@@ -403,7 +429,7 @@
   const lbOpen = () => $("lightbox").classList.contains("open");
   function openLightbox(id) {
     lbReel = null;
-    lbList = (tab === "owned" ? data.items.filter((i) => isOwned(i.id) && !i.upsellOnly) : visible(items()));
+    lbList = (tab === "owned" ? items().filter((i) => isOwned(i.id)) : visible(items()));
     lbIndex = Math.max(0, lbList.findIndex((i) => i.id === id));
     $("lightbox").classList.add("open"); $("scrim").classList.add("open");
     renderLightbox();

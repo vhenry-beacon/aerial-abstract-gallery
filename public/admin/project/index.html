@@ -71,6 +71,7 @@
           <section class="pj-card">
             <h2>Files <span class="st-muted st-small" id="cloudSum"></span></h2>
             <p class="st-muted st-small">Drop everything from the shoot: raw photos and video, edited exports, music you have a license for. It goes straight to the cloud. Keep this page open until it finishes; if it's interrupted, drop the same files again and it picks up where it left off.</p>
+            <p class="st-muted st-small"><b>Name folders by what's in them</b> so Claude sorts them right: <i>Drone Vertical</i>, <i>Drone Horizontal</i>, <i>Osmo Ground</i>, <i>Photos</i>. More footage later? Upload just the new folder and send it to Claude with “add these”. Nothing already in the gallery is redone or changed.</p>
             <div class="drop st-drop" id="drop">
               <b>Drop files or whole folders here</b><br>
               <span class="st-muted">or</span>
@@ -82,6 +83,12 @@
             <div id="upList" class="st-uplist"></div>
             <details><summary class="st-small" style="cursor:pointer">Files in the cloud</summary>
               <div class="scroll"><table class="t" id="cloudFiles"></table></div></details>
+            <div class="pj-drivecheck">
+              <b>Clearing your drive?</b>
+              <p class="st-muted st-small">Pick the shoot's folder on your drive. Every file is compared with its cloud copy, byte for byte (nothing is uploaded). When everything matches, the files are safe to delete from the drive.</p>
+              <label class="btn ghost small">Check my drive<input type="file" id="checkDrive" webkitdirectory multiple hidden></label>
+              <div id="checkOut"></div>
+            </div>
           </section>
 
           <section class="pj-card" id="claudeCard">
@@ -92,7 +99,9 @@
       </div>
     </section>
   </div>
+  <script src="/assets/vendor/spark-md5-3.0.2.min.js"></script>
   <script src="/assets/uploader.js"></script>
+  <script src="/assets/drivecheck.js"></script>
   <script src="/assets/projects.js"></script>
 </body>
 </html>
