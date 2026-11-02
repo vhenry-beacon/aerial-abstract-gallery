@@ -12,8 +12,12 @@
       "sourceStart": 0.0,
       "sourceEnd": 14.514,
       "fullFile": "clip-01.mp4",
-      "preview": "/media/river-oaks/clip-01.mp4?v=1",
-      "poster": "/media/river-oaks/clip-01.jpg?v=1"
+      "preview": "/media/river-oaks/clip-01.mp4?v=1f",
+      "poster": "/media/river-oaks/clip-01.jpg?v=1f",
+      "sourceFrames": [
+        0,
+        435
+      ]
     },
     {
       "id": "clip-02",
@@ -27,8 +31,12 @@
       "sourceStart": 14.514,
       "sourceEnd": 22.322,
       "fullFile": "clip-02.mp4",
-      "preview": "/media/river-oaks/clip-02.mp4",
-      "poster": "/media/river-oaks/clip-02.jpg"
+      "preview": "/media/river-oaks/clip-02.mp4?v=0f",
+      "poster": "/media/river-oaks/clip-02.jpg?v=0f",
+      "sourceFrames": [
+        435,
+        669
+      ]
     },
     {
       "id": "clip-03",
@@ -42,8 +50,12 @@
       "sourceStart": 22.322,
       "sourceEnd": 26.16,
       "fullFile": "clip-03.mp4",
-      "preview": "/media/river-oaks/clip-03.mp4",
-      "poster": "/media/river-oaks/clip-03.jpg"
+      "preview": "/media/river-oaks/clip-03.mp4?v=0f",
+      "poster": "/media/river-oaks/clip-03.jpg?v=0f",
+      "sourceFrames": [
+        669,
+        784
+      ]
     },
     {
       "id": "clip-04",
@@ -57,8 +69,12 @@
       "sourceStart": 26.16,
       "sourceEnd": 34.935,
       "fullFile": "clip-04.mp4",
-      "preview": "/media/river-oaks/clip-04.mp4?v=1",
-      "poster": "/media/river-oaks/clip-04.jpg?v=1"
+      "preview": "/media/river-oaks/clip-04.mp4?v=1f",
+      "poster": "/media/river-oaks/clip-04.jpg?v=1f",
+      "sourceFrames": [
+        784,
+        1047
+      ]
     },
     {
       "id": "clip-05",
@@ -72,14 +88,18 @@
       "sourceStart": 34.935,
       "sourceEnd": 41.942,
       "fullFile": "clip-05.mp4",
-      "preview": "/media/river-oaks/clip-05.mp4?v=1",
-      "poster": "/media/river-oaks/clip-05.jpg?v=1"
+      "preview": "/media/river-oaks/clip-05.mp4?v=1f",
+      "poster": "/media/river-oaks/clip-05.jpg?v=1f",
+      "sourceFrames": [
+        1047,
+        1257
+      ]
     },
     {
       "id": "clip-06",
       "type": "video",
       "title": "Clip 06",
-      "duration": 5.74,
+      "duration": 5.71,
       "orientation": "portrait",
       "width": 2160,
       "height": 3840,
@@ -87,8 +107,12 @@
       "sourceStart": 41.942,
       "sourceEnd": 47.648,
       "fullFile": "clip-06.mp4",
-      "preview": "/media/river-oaks/clip-06.mp4?v=1",
-      "poster": "/media/river-oaks/clip-06.jpg?v=1"
+      "preview": "/media/river-oaks/clip-06.mp4?v=1f",
+      "poster": "/media/river-oaks/clip-06.jpg?v=1f",
+      "sourceFrames": [
+        1257,
+        1428
+      ]
     },
     {
       "id": "clip-07",
@@ -102,14 +126,18 @@
       "sourceStart": 47.648,
       "sourceEnd": 51.952,
       "fullFile": "clip-07.mp4",
-      "preview": "/media/river-oaks/clip-07.mp4",
-      "poster": "/media/river-oaks/clip-07.jpg"
+      "preview": "/media/river-oaks/clip-07.mp4?v=0f",
+      "poster": "/media/river-oaks/clip-07.jpg?v=0f",
+      "sourceFrames": [
+        1428,
+        1557
+      ]
     },
     {
       "id": "clip-08",
       "type": "video",
       "title": "Clip 08",
-      "duration": 5.31,
+      "duration": 5.27,
       "orientation": "portrait",
       "width": 2160,
       "height": 3840,
@@ -117,8 +145,12 @@
       "sourceStart": 51.952,
       "sourceEnd": 57.224,
       "fullFile": "clip-08.mp4",
-      "preview": "/media/river-oaks/clip-08.mp4?v=1",
-      "poster": "/media/river-oaks/clip-08.jpg?v=1"
+      "preview": "/media/river-oaks/clip-08.mp4?v=1f",
+      "poster": "/media/river-oaks/clip-08.jpg?v=1f",
+      "sourceFrames": [
+        1557,
+        1715
+      ]
     },
     {
       "id": "clip-09",
@@ -132,14 +164,18 @@
       "sourceStart": 57.224,
       "sourceEnd": 63.197,
       "fullFile": "clip-09.mp4",
-      "preview": "/media/river-oaks/clip-09.mp4",
-      "poster": "/media/river-oaks/clip-09.jpg"
+      "preview": "/media/river-oaks/clip-09.mp4?v=0f",
+      "poster": "/media/river-oaks/clip-09.jpg?v=0f",
+      "sourceFrames": [
+        1715,
+        1894
+      ]
     },
     {
       "id": "clip-10",
       "type": "video",
       "title": "Clip 10",
-      "duration": 7.64,
+      "duration": 7.67,
       "orientation": "portrait",
       "width": 2160,
       "height": 3840,
@@ -147,8 +183,12 @@
       "sourceStart": 63.197,
       "sourceEnd": 70.837,
       "fullFile": "clip-10.mp4",
-      "preview": "/media/river-oaks/clip-10.mp4",
-      "poster": "/media/river-oaks/clip-10.jpg"
+      "preview": "/media/river-oaks/clip-10.mp4?v=0f",
+      "poster": "/media/river-oaks/clip-10.jpg?v=0f",
+      "sourceFrames": [
+        1894,
+        2123
+      ]
     },
     {
       "id": "clip-11",
@@ -162,8 +202,12 @@
       "sourceStart": 70.837,
       "sourceEnd": 79.346,
       "fullFile": "clip-11.mp4",
-      "preview": "/media/river-oaks/clip-11.mp4",
-      "poster": "/media/river-oaks/clip-11.jpg"
+      "preview": "/media/river-oaks/clip-11.mp4?v=0f",
+      "poster": "/media/river-oaks/clip-11.jpg?v=0f",
+      "sourceFrames": [
+        2123,
+        2378
+      ]
     },
     {
       "id": "photo-01",
