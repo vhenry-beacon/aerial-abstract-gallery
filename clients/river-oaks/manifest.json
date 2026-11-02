@@ -4,7 +4,7 @@
       "id": "clip-01",
       "type": "video",
       "title": "Clip 01",
-      "duration": 5.04,
+      "duration": 14.51,
       "orientation": "portrait",
       "width": 2160,
       "height": 3840,
@@ -12,8 +12,8 @@
       "sourceStart": 0.0,
       "sourceEnd": 14.514,
       "fullFile": "clip-01.mp4",
-      "preview": "/media/river-oaks/clip-01.mp4?v=2",
-      "poster": "/media/river-oaks/clip-01.jpg?v=2",
+      "preview": "/media/river-oaks/clip-01.mp4?v=3",
+      "poster": "/media/river-oaks/clip-01.jpg?v=3",
       "sourceFrames": [
         0,
         435
@@ -71,8 +71,8 @@
       "sourceStart": 26.16,
       "sourceEnd": 34.935,
       "fullFile": "clip-04.mp4",
-      "preview": "/media/river-oaks/clip-04.mp4?v=1f",
-      "poster": "/media/river-oaks/clip-04.jpg?v=1f",
+      "preview": "/media/river-oaks/clip-04.mp4?v=2",
+      "poster": "/media/river-oaks/clip-04.jpg?v=2",
       "sourceFrames": [
         784,
         1047
@@ -92,8 +92,8 @@
       "sourceStart": 34.935,
       "sourceEnd": 41.942,
       "fullFile": "clip-05.mp4",
-      "preview": "/media/river-oaks/clip-05.mp4?v=1f",
-      "poster": "/media/river-oaks/clip-05.jpg?v=1f",
+      "preview": "/media/river-oaks/clip-05.mp4?v=2",
+      "poster": "/media/river-oaks/clip-05.jpg?v=2",
       "sourceFrames": [
         1047,
         1257
@@ -113,8 +113,8 @@
       "sourceStart": 41.942,
       "sourceEnd": 47.648,
       "fullFile": "clip-06.mp4",
-      "preview": "/media/river-oaks/clip-06.mp4?v=1f",
-      "poster": "/media/river-oaks/clip-06.jpg?v=1f",
+      "preview": "/media/river-oaks/clip-06.mp4?v=2",
+      "poster": "/media/river-oaks/clip-06.jpg?v=2",
       "sourceFrames": [
         1257,
         1428
@@ -134,8 +134,8 @@
       "sourceStart": 47.648,
       "sourceEnd": 51.952,
       "fullFile": "clip-07.mp4",
-      "preview": "/media/river-oaks/clip-07.mp4?v=2",
-      "poster": "/media/river-oaks/clip-07.jpg?v=2",
+      "preview": "/media/river-oaks/clip-07.mp4?v=3",
+      "poster": "/media/river-oaks/clip-07.jpg?v=3",
       "sourceFrames": [
         1428,
         1557
@@ -155,8 +155,8 @@
       "sourceStart": 51.952,
       "sourceEnd": 57.224,
       "fullFile": "clip-08.mp4",
-      "preview": "/media/river-oaks/clip-08.mp4?v=1f",
-      "poster": "/media/river-oaks/clip-08.jpg?v=1f",
+      "preview": "/media/river-oaks/clip-08.mp4?v=2",
+      "poster": "/media/river-oaks/clip-08.jpg?v=2",
       "sourceFrames": [
         1557,
         1715
@@ -243,7 +243,7 @@
       "height": 3072,
       "source": "DJI_20261101055327_0085_D.JPG",
       "fullFile": "photo-02.jpg",
-      "preview": "/media/river-oaks/photo-02.jpg?v=1",
+      "preview": "/media/river-oaks/photo-02.jpg?v=2",
       "origPreview": "/media/river-oaks/photo-02.orig.jpg"
     },
     {
@@ -256,7 +256,7 @@
       "height": 3072,
       "source": "DJI_20261101055335_0086_D.JPG",
       "fullFile": "photo-03.jpg",
-      "preview": "/media/river-oaks/photo-03.jpg?v=2",
+      "preview": "/media/river-oaks/photo-03.jpg?v=3",
       "origPreview": "/media/river-oaks/photo-03.orig.jpg"
     },
     {
@@ -317,7 +317,7 @@
       "height": 3000,
       "source": "DJI_20261101071224_0149_D.JPG",
       "fullFile": "photo-08.jpg",
-      "preview": "/media/river-oaks/photo-08.jpg?v=1",
+      "preview": "/media/river-oaks/photo-08.jpg?v=2",
       "origPreview": "/media/river-oaks/photo-08.orig.jpg"
     },
     {
@@ -342,7 +342,7 @@
       "height": 3000,
       "source": "DJI_20261101071540_0158_D.JPG",
       "fullFile": "photo-10.jpg",
-      "preview": "/media/river-oaks/photo-10.jpg?v=1",
+      "preview": "/media/river-oaks/photo-10.jpg?v=2",
       "origPreview": "/media/river-oaks/photo-10.orig.jpg"
     },
     {
@@ -391,7 +391,7 @@
       "height": 2160,
       "source": "DJI_20261031190638_0030_D.JPG",
       "fullFile": "photo-14.jpg",
-      "preview": "/media/river-oaks/photo-14.jpg?v=1",
+      "preview": "/media/river-oaks/photo-14.jpg?v=2",
       "origPreview": "/media/river-oaks/photo-14.orig.jpg"
     },
     {
@@ -440,7 +440,7 @@
       "height": 5712,
       "source": "IMG_4363.HEIC",
       "fullFile": "photo-18.jpg",
-      "preview": "/media/river-oaks/photo-18.jpg?v=1",
+      "preview": "/media/river-oaks/photo-18.jpg?v=2",
       "origPreview": "/media/river-oaks/photo-18.orig.jpg"
     },
     {
