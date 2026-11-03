@@ -127,10 +127,10 @@
         253
       ],
       "fullFile": "clip-01.mp4",
-      "preview": "/media/new-test-project/clip-01.mp4?v=1",
-      "poster": "/media/new-test-project/clip-01.jpg?v=1",
-      "origPreview": "/media/new-test-project/clip-01.orig.mp4",
-      "origPoster": "/media/new-test-project/clip-01.orig.jpg"
+      "preview": "/media/new-test-project/clip-01.mp4?v=2",
+      "poster": "/media/new-test-project/clip-01.jpg?v=2",
+      "origPreview": "/media/new-test-project/clip-01.orig.mp4?v=2",
+      "origPoster": "/media/new-test-project/clip-01.orig.jpg?v=2"
     },
     {
       "id": "photo-06",
