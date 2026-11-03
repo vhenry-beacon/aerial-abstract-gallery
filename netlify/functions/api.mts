@@ -505,10 +505,13 @@ export default async (req: Request, context: Context) => {
           ? await Promise.all((await r2List(`raw/${project.id}/`)).files.filter((f: any) => /\.(mp3|m4a|wav|aac|aiff?|flac)$/i.test(f.key))
               .map(async (f: any) => ({ key: f.key, name: f.key.split("/").pop(), size: f.size, url: await r2Presign("GET", f.key, 6 * 3600) })))
           : [];
+        // music made on the Mac (Stable Audio 3, tools/make_music.py) for this gallery's reels
+        const made = r2() ? await Promise.all((review.musicJobs || []).flatMap((j: any) => (j.tracks || []).map(async (t: any) => ({
+          ...t, reelId: j.reelId, prompt: j.prompt, url: await r2Presign("GET", t.key, 6 * 3600) })))) : [];
         // Aerial Abstract's own royalty-free tracks (tools/compose_music.py)
         const library = r2() ? await Promise.all((MUSIC_LIBRARY as any[]).map(async (t: any) => ({ ...t, url: await r2Presign("GET", t.key, 6 * 3600) }))) : [];
         return json({
-          client: publicClient(client), review, flags, worker: await getWorker(), music, library, reels: reelList(client, review),
+          client: publicClient(client), review, flags, worker: await getWorker(), music, library, made, reels: reelList(client, review),
           project: project ? { id: project.id, name: project.name, addons: project.quote?.addons || [] } : null,
           items: client.items.map((i: any) => ({ ...i, ready: !!metas[i.id] })),
         });
@@ -557,6 +560,25 @@ export default async (req: Request, context: Context) => {
         }
         // A highlight reel add-on's plan (pieces, title, look...) lives in review.reels[<item id>]; its status and notes are
         // the item's own (review.items[<item id>]), like any clip. review.reel is the older one-per-gallery reel.
+        // "Make music for this reel": a job for the Mac (studio.py auto runs tools/make_music.py)
+        if (b.musicJob && !tool) {
+          const it = client.items.find((i: any) => i.id === b.musicJob.reelId && (i.reel || i.id === "highlight-reel"));
+          if (!it) return bad("Unknown reel");
+          const prompt = str(b.musicJob.prompt, 400);
+          if (!prompt) return bad("Describe the music you want");
+          const jobs = (review.musicJobs ||= []);
+          if (jobs.filter((j: any) => j.status === "queued").length >= 6) return bad("Six music requests are already waiting; give the Mac a few minutes");
+          jobs.push({ id: crypto.randomUUID().slice(0, 8), reelId: it.id, prompt, seconds: num(b.musicJob.seconds, 5, 300, 30),
+            count: Math.round(num(b.musicJob.count, 1, 4, 3)), status: "queued", at });
+        }
+        if (b.musicJobDone && tool) {
+          const j = (review.musicJobs || []).find((x: any) => x.id === b.musicJobDone);
+          if (j) {
+            j.status = b.error ? "failed" : "done"; j.doneAt = at;
+            if (b.error) j.error = str(b.error, 300);
+            j.tracks = (Array.isArray(b.tracks) ? b.tracks : []).slice(0, 6).map((t: any) => ({ key: str(t.key, 300), title: str(t.title, 120) }));
+          }
+        }
         if (b.reelId) {
           const it = client.items.find((i: any) => i.id === b.reelId && i.reel);
           if (!it) return bad("Unknown reel");

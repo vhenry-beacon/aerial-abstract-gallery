@@ -619,6 +619,11 @@ def cmd_auto():
         for slug in slugs:
             site = Site(slug, by="Auto-editor")
             data = site.review()
+            # "Make music for this reel" requests first (Stable Audio on this Mac; no deploy needed, it lives in R2)
+            import make_music
+            for job in make_music.queued(data):
+                log(f"{slug}: making music for {job['reelId']}")
+                make_music.run_job(site, R2(), job, log)
             ids, do_reel, reels = pending(data), reel_changed(data["review"].get("reel")), addon_reels_changed(data)
             if not ids and not do_reel and not reels:
                 continue

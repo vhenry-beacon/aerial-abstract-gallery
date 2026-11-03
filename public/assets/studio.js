@@ -461,7 +461,7 @@
       <button class="btn comp small ${ad ? "is-on" : ""}" id="reelAddon" type="button" title="Sell this reel to the client as an add-on, at the price of the add-on you pick">💲 Add-on</button>
       ${ad && addonList().length > 1 ? `<select class="field st-addon-pick" id="reelAddonPick" aria-label="Sell as">${addonList().map((a) =>
         `<option value="${esc(a.name)}" ${a.name === ad ? "selected" : ""}>${esc(a.name)} · ${money(a.price)}</option>`).join("")}</select>` : ""}`;
-    renderTimeline(); renderPiece(); renderReelForm(); renderTrySounds(); renderReelNotes(); markReelDirty();
+    renderTimeline(); renderPiece(); renderReelForm(); renderTrySounds(); renderMakeMusic(); renderReelNotes(); markReelDirty();
     $("clipPick").innerHTML = clips().map((c) => `<button data-addclip="${esc(c.id)}" type="button"><img src="${esc(c.poster)}" alt="">${esc(c.title)} · ${secs(c.duration)}</button>`).join("");
     showReelFrame(0);
   }
@@ -503,6 +503,7 @@
       <span>Overall look</span><select class="field" data-rf="look">${lookOpts}</select>
       <span>Sound</span><select class="field" data-rf="music">${musicOptions()}</select>
       <span>Try sounds</span><div class="st-try" id="trySounds"></div>
+      <span>Make music</span><div class="st-make" id="makeMusic"></div>
       <span></span><span class="st-small st-muted">To add a song, upload the music file you have a license for in the project's
         ${D.project ? `<a href="/admin/project/?id=${encodeURIComponent(D.project.id)}" target="_blank">Files box</a>` : "Files box"} (any folder), then pick it here.</span>`;
   }
@@ -514,6 +515,9 @@
     return [
       { value: "", title: "No sound" },
       { value: "clips", title: "The clips' own sound", mood: "The festival as it sounded (Osmo clips; drone shots are silent)" },
+      // made on the Mac for this reel first (Stable Audio, newest first)
+      ...(D.made || []).filter((t) => t.reelId === reelItemId(reelKey)).reverse()
+        .map((t) => ({ value: `file:${t.key}`, title: t.title, mood: "Made for this reel", url: t.url, group: "Made for this reel" })),
       ...(D.library || []).map((t) => ({ value: `file:${t.key}`, title: t.title, mood: t.mood, goodFor: t.goodFor, url: t.url, group: "Aerial Abstract music · royalty-free" })),
       ...(D.music || []).map((m) => ({ value: `file:${m.key}`, title: m.name, mood: "Your uploaded music", url: m.url, group: "Your music" })),
     ];
@@ -526,6 +530,26 @@
     for (const g of [...new Set(cs.filter((c) => c.group).map((c) => c.group))]) html += `<optgroup label="${esc(g)}">${cs.filter((c) => c.group === g).map(opt).join("")}</optgroup>`;
     if (v && !cs.some((c) => c.value === v)) html += `<option value="${esc(v)}" selected>${v.startsWith("file:") ? `${esc(v.split("/").pop())} (file not found)` : `“${esc(v)}” (a note only, no sound yet: pick a choice above)`}</option>`;
     return html;
+  }
+  // "Make music for this reel": the editing Mac writes new music with Stable Audio at the reel's length
+  const MUSIC_FEELS = [
+    ["Warm acoustic", "warm gentle acoustic guitar and soft piano, light percussion, uplifting, family community festival, 100 BPM"],
+    ["Bright & upbeat", "bright upbeat indie pop, acoustic guitar, hand claps, happy festival day, 118 BPM"],
+    ["Cinematic", "cinematic inspiring, soft piano, warm strings, gentle build, aerial drone views, 90 BPM"],
+    ["Soft & calm", "calm soft felt piano and airy pads, peaceful, reflective, 80 BPM"],
+    ["Lo-fi", "mellow lofi chillhop, warm electric piano, soft drums, relaxed sunset, 82 BPM"],
+    ["Percussion only", "hand percussion only, frame drum and hand claps, festive and warm, no melodic instruments, 96 BPM"],
+  ];
+  function renderMakeMusic() {
+    const el = $("makeMusic"); if (!el) return;
+    const jobs = (D.review.musicJobs || []).filter((j) => j.reelId === reelItemId(reelKey)).slice(-3).reverse();
+    const len = Math.max(5, Math.round(reelLength()));
+    el.innerHTML = `<div class="st-chips">${MUSIC_FEELS.map(([l, p]) => `<button class="st-chip" data-feel="${esc(p)}" type="button">${esc(l)}</button>`).join("")}</div>
+      <textarea class="field" id="musicPrompt" rows="2" placeholder="Pick a feel above, or describe the music: e.g. gentle acoustic guitar, warm and happy, family festival"></textarea>
+      <div class="st-note-row"><span class="st-small st-muted">Made on the editing Mac with Stable Audio: 3 versions, ${clock(len)} long, ready in about 15 minutes. Free for client use.</span>
+        <button class="btn small" id="makeMusicGo" type="button">✨ Make 3 versions</button></div>
+      ${jobs.map((j) => `<div class="st-small st-job">${j.status === "queued" ? "⏳ Making" : j.status === "done" ? "✓ Made" : "⚠️ Couldn't make"}
+        “${esc(j.prompt.slice(0, 70))}”${j.status === "done" ? ": listed above under Try sounds" : j.status === "failed" ? `: ${esc(j.error || "")}` : ""}</div>`).join("")}`;
   }
   // "Try sounds": hear the reel with a sound before picking it (nothing is saved until Use this + Save reel changes)
   function renderTrySounds() {
@@ -581,6 +605,13 @@
       if (t.dataset.reelkey === reelKey) return;
       if (!same(rdraft, reelFromReview()) && !confirm("This reel has unsaved changes. Switch reels anyway?")) return;
       stopReel(); reelKey = t.dataset.reelkey; rdraft = reelFromReview(); pieceIdx = rdraft.pieces.length ? 0 : -1; renderReel();
+    }
+    else if (t.dataset.feel) { $("musicPrompt").value = t.dataset.feel; $("musicPrompt").focus(); }
+    else if (t.id === "makeMusicGo") {
+      const prompt = $("musicPrompt").value.trim();
+      if (!prompt) { toast("Pick a feel or describe the music first"); return $("musicPrompt").focus(); }
+      const job = { reelId: reelItemId(reelKey), prompt, seconds: Math.max(5, Math.round(reelLength())), count: 3 };
+      if (await save({ musicJob: job }, "Asked the editing Mac for 3 versions. They'll appear under Try sounds in about 15 minutes.")) renderMakeMusic();
     }
     else if (t.dataset.try !== undefined) {
       const was = seq.playing && !seq.single && seq.sound === t.dataset.try;
@@ -753,6 +784,21 @@
     }
     seq.raf = requestAnimationFrame(tick);
   }
+
+  // While a "Make music" request is waiting, check once a minute and show the new versions when the Mac is done
+  // (the reel being edited stays as it is: only the sound lists refresh).
+  setInterval(async () => {
+    if (!D || tab !== "reel" || seq.playing || document.hidden) return;
+    if (!(D.review.musicJobs || []).some((j) => j.status === "queued")) return;
+    const r = await api(`/api/admin/review?slug=${encodeURIComponent(slug)}`);
+    if (!r.ok) return;
+    const before = JSON.stringify((D.review.musicJobs || []).map((j) => j.status));
+    D = r.body;
+    if (JSON.stringify((D.review.musicJobs || []).map((j) => j.status)) !== before) {
+      renderReelForm(); renderTrySounds(); renderMakeMusic(); markReelDirty();
+      if ((D.review.musicJobs || []).some((j) => j.reelId === reelItemId(reelKey) && j.status === "done")) toast("New music is ready under Try sounds.");
+    }
+  }, 60000);
 
   boot();
 })();

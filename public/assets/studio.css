@@ -204,3 +204,6 @@ code { background: var(--gold-soft); padding: 1px 6px; border-radius: 6px; font-
 .st-try { display: grid; gap: 6px; max-height: 260px; overflow: auto; }
 .st-try-row { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; font-size: 13px; padding: 4px 6px; border-radius: 8px; }
 .st-try-row.picked { background: var(--gold-soft); }
+.st-make { display: grid; gap: 6px; }
+.st-make textarea { margin: 0; }
+.st-job { padding: 3px 0; }
