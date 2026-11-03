@@ -203,7 +203,7 @@
     document.querySelectorAll(".tab").forEach((t) => {
       const k = t.dataset.tab;
       t.setAttribute("aria-selected", String(k === tab));
-      const base = { all: "Everything", clips: "Videos", photos: "Pictures", picked: "My picks", owned: "My files", addons: "Add-ons" }[k];
+      const base = { all: "Everything", clips: "Videos", photos: "Pictures", picked: "My picks", owned: "My files", addons: "Highlight Reels" }[k];
       if (k === "addons") t.classList.toggle("hidden", !ups.length);
       t.textContent = counts[k] ? `${base} (${counts[k]})` : base;
     });
