@@ -1841,7 +1841,7 @@
       "title": "Website & YouTube reel \u00b7 30 seconds",
       "reel": "web-30",
       "upsellOnly": true,
-      "duration": 30.0,
+      "duration": 26.63,
       "orientation": "landscape",
       "width": 3840,
       "height": 2160,
@@ -1856,10 +1856,10 @@
         "wide-09",
         "wide-18"
       ],
-      "version": 2,
+      "version": 4,
       "fullFile": "reel-web-30.mp4",
-      "preview": "/media/river-oaks/reel-web-30.mp4?v=2",
-      "poster": "/media/river-oaks/reel-web-30.jpg?v=2"
+      "preview": "/media/river-oaks/reel-web-30.mp4?v=4",
+      "poster": "/media/river-oaks/reel-web-30.jpg?v=4"
     },
     {
       "id": "reel-web-60",
@@ -1867,7 +1867,7 @@
       "title": "Website & YouTube reel \u00b7 1 minute",
       "reel": "web-60",
       "upsellOnly": true,
-      "duration": 60.0,
+      "duration": 54.83,
       "orientation": "landscape",
       "width": 3840,
       "height": 2160,
@@ -1890,10 +1890,10 @@
         "wide-07",
         "wide-18"
       ],
-      "version": 1,
+      "version": 2,
       "fullFile": "reel-web-60.mp4",
-      "preview": "/media/river-oaks/reel-web-60.mp4?v=1",
-      "poster": "/media/river-oaks/reel-web-60.jpg?v=1"
+      "preview": "/media/river-oaks/reel-web-60.mp4?v=2",
+      "poster": "/media/river-oaks/reel-web-60.jpg?v=2"
     },
     {
       "id": "reel-web-90",
@@ -1901,7 +1901,7 @@
       "title": "Website & YouTube reel \u00b7 1\u00bd minutes",
       "reel": "web-90",
       "upsellOnly": true,
-      "duration": 90.0,
+      "duration": 68.08,
       "orientation": "landscape",
       "width": 3840,
       "height": 2160,
@@ -1932,10 +1932,10 @@
         "wide-15",
         "wide-18"
       ],
-      "version": 1,
+      "version": 2,
       "fullFile": "reel-web-90.mp4",
-      "preview": "/media/river-oaks/reel-web-90.mp4?v=1",
-      "poster": "/media/river-oaks/reel-web-90.jpg?v=1"
+      "preview": "/media/river-oaks/reel-web-90.mp4?v=2",
+      "poster": "/media/river-oaks/reel-web-90.jpg?v=2"
     },
     {
       "id": "reel-social-7",
@@ -1943,7 +1943,7 @@
       "title": "Social media reel \u00b7 7 seconds",
       "reel": "social-7",
       "upsellOnly": true,
-      "duration": 26.2,
+      "duration": 26.67,
       "orientation": "portrait",
       "width": 1080,
       "height": 1920,
@@ -1953,10 +1953,10 @@
         "ground-10",
         "wide-07"
       ],
-      "version": 5,
+      "version": 6,
       "fullFile": "reel-social-7.mp4",
-      "preview": "/media/river-oaks/reel-social-7.mp4?v=5",
-      "poster": "/media/river-oaks/reel-social-7.jpg?v=5"
+      "preview": "/media/river-oaks/reel-social-7.mp4?v=6",
+      "poster": "/media/river-oaks/reel-social-7.jpg?v=6"
     },
     {
       "id": "reel-social-15",
@@ -2001,10 +2001,10 @@
         "ground-24",
         "wide-07"
       ],
-      "version": 2,
+      "version": 3,
       "fullFile": "reel-social-30.mp4",
-      "preview": "/media/river-oaks/reel-social-30.mp4?v=2",
-      "poster": "/media/river-oaks/reel-social-30.jpg?v=2"
+      "preview": "/media/river-oaks/reel-social-30.mp4?v=3",
+      "poster": "/media/river-oaks/reel-social-30.jpg?v=3"
     },
     {
       "id": "reel-social-60",
@@ -2035,10 +2035,10 @@
         "ground-25",
         "wide-07"
       ],
-      "version": 2,
+      "version": 3,
       "fullFile": "reel-social-60.mp4",
-      "preview": "/media/river-oaks/reel-social-60.mp4?v=2",
-      "poster": "/media/river-oaks/reel-social-60.jpg?v=2"
+      "preview": "/media/river-oaks/reel-social-60.mp4?v=3",
+      "poster": "/media/river-oaks/reel-social-60.jpg?v=3"
     }
   ],
   "rawSkipped": [
