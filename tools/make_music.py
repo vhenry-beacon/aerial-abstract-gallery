@@ -59,13 +59,21 @@ def run_job(site, r2, job, log=print):
                 generate(job["prompt"], float(job["seconds"]), seed, out)
                 key = f"music/generated/{site.slug}/{job['id']}-{n + 1}.m4a"
                 r2.put(key, out, "audio/mp4")
-                tracks.append({"key": key, "title": f"{job['prompt'][:48]} · version {n + 1}"})
+                tracks.append({"key": key, "title": f"{short_title(job['prompt'])} · version {n + 1}"})
         site.post({"musicJobDone": job["id"], "tracks": tracks})
     except Exception as e:  # report it on the request in the studio instead of failing silently
         err = e.stderr[-300:] if isinstance(e, subprocess.CalledProcessError) and e.stderr else str(e)
         site.post({"musicJobDone": job["id"], "tracks": tracks, "error": err or "Making the music failed"})
         log(f"   music {job['id']} failed: {err}")
     return tracks
+
+
+def short_title(prompt):
+    """'cinematic inspiring, soft piano, warm strings' -> 'Cinematic inspiring' (whole phrases, never cut mid-word)."""
+    first = prompt.split(",")[0].strip()
+    if len(first) > 40:
+        first = first[:40].rsplit(" ", 1)[0]
+    return first[:1].upper() + first[1:]
 
 
 def queued(data):
