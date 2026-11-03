@@ -127,10 +127,10 @@ def main():
                 a, b = round(fa / info["fps"], 3), round(fb / info["fps"], 3)
                 # full quality: frame-exact cut, original resolution, audio kept (AAC)
                 cut_clip(src, fa, fb, info["fps"], full, args.crf)
-                # preview: small, silent, watermarked
+                # preview: small, watermarked, with the clip's own sound
                 run(["ffmpeg", "-y", "-i", full, "-i", wm, "-filter_complex",
-                     f"[0:v]scale={pw}:{ph},fps=30[v];[v][1:v]overlay=0:0",
-                     "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "30", "-pix_fmt", "yuv420p",
+                     f"[0:v]scale={pw}:{ph},fps=30[v];[v][1:v]overlay=0:0[out]",
+                     "-map", "[out]", "-map", "0:a:0?", "-c:a", "aac", "-b:a", "96k", "-c:v", "libx264", "-preset", "veryfast", "-crf", "30", "-pix_fmt", "yuv420p",
                      "-movflags", "+faststart", os.path.join(args.preview, f"{cid}.mp4")])
                 run(["ffmpeg", "-y", "-ss", f"{min(1.0, (b - a) / 2)}", "-i", os.path.join(args.preview, f"{cid}.mp4"),
                      "-frames:v", "1", "-q:v", "4", os.path.join(args.preview, f"{cid}.jpg")])

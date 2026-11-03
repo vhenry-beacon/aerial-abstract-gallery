@@ -500,8 +500,13 @@ export default async (req: Request, context: Context) => {
         flags.reel = { waiting: reelWaiting(review.reel), note: noteWaiting(review.reel) };
         for (const [rid, rp] of Object.entries(review.reels || {})) if (flags[rid]) flags[rid].waiting ||= reelWaiting(rp);
         const project = (await listProjects()).find((p: any) => p.gallerySlug === slug);
+        // music Keri uploaded with the project's files (any folder): the reels' Music menu offers these
+        const music = project && r2()
+          ? (await r2List(`raw/${project.id}/`)).files.filter((f: any) => /\.(mp3|m4a|wav|aac|aiff?|flac)$/i.test(f.key))
+              .map((f: any) => ({ key: f.key, name: f.key.split("/").pop(), size: f.size }))
+          : [];
         return json({
-          client: publicClient(client), review, flags, worker: await getWorker(), project: project ? { id: project.id, name: project.name } : null,
+          client: publicClient(client), review, flags, worker: await getWorker(), project: project ? { id: project.id, name: project.name } : null, music,
           items: client.items.map((i: any) => ({ ...i, ready: !!metas[i.id] })),
         });
       }

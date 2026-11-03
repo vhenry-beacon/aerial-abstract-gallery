@@ -233,7 +233,7 @@
     const userNote = video ? `<label class="st-small"><input type="checkbox" id="noteAtTime" checked> at <span id="noteTime">0:00</span></label>` : "";
     $("editor").innerHTML = `
       <div class="st-media">
-        ${video ? `<video id="edMedia" src="${esc(i.origPreview || i.preview)}" poster="${esc(i.origPoster || i.poster || "")}" autoplay muted loop playsinline controls controlslist="nodownload noplaybackrate" disablepictureinpicture></video>`
+        ${video ? `<video id="edMedia" src="${esc(i.origPreview || i.preview)}" poster="${esc(i.origPoster || i.poster || "")}" loop playsinline controls controlslist="nodownload noplaybackrate" disablepictureinpicture></video>`
                 : `<img id="edMedia" src="${esc(i.origPreview || i.preview)}" alt="">`}
         <button class="st-compare" id="compare" type="button">Hold to see original</button>
       </div>
@@ -264,6 +264,8 @@
     if (video) { renderSpeeds(); renderTrim(); }
     applyDraft();
     const m = $("edMedia");
+    // play with the clip's own sound; if the browser blocks sound before a click, start muted (the speaker button unmutes)
+    if (video) m.play().catch(() => { m.muted = true; m.play().catch(() => {}); });
     const hold = (on) => (m.style.filter = on ? "none" : Looks.cssFilter(draft.look));
     for (const ev of ["pointerdown"]) $("compare").addEventListener(ev, () => hold(true));
     for (const ev of ["pointerup", "pointerleave", "pointercancel"]) $("compare").addEventListener(ev, () => hold(false));
@@ -482,7 +484,17 @@
       <span>Closing text</span><input class="field" data-rf="endcard" value="${esc(rdraft.endcard)}" placeholder="e.g. October 31, 2026">
       <span>Transitions</span><select class="field" data-rf="transition"><option value="fade" ${rdraft.transition === "fade" ? "selected" : ""}>Soft crossfade</option><option value="cut" ${rdraft.transition === "cut" ? "selected" : ""}>Hard cut</option></select>
       <span>Overall look</span><select class="field" data-rf="look">${lookOpts}</select>
-      <span>Music</span><input class="field" data-rf="music" value="${esc(rdraft.music)}" placeholder="Song you have a license for, or the mood you want">`;
+      <span>Sound</span><select class="field" data-rf="music">${musicOptions()}</select>
+      <span></span><span class="st-small st-muted">To add a song, upload the music file you have a license for in the project's
+        ${D.project ? `<a href="/admin/project/?id=${encodeURIComponent(D.project.id)}" target="_blank">Files box</a>` : "Files box"} (any folder), then pick it here.</span>`;
+  }
+  // What the reel sounds like: "" silent, "clips" = each piece's own sound, "file:<cloud key>" = a music file Keri
+  // uploaded with the project. Anything else is an old free-text note ("Fun family sounds"), which adds no sound.
+  function musicOptions() {
+    const v = rdraft.music || "";
+    const opts = [["", "No sound"], ["clips", "The clips' own sound"], ...(D.music || []).map((m) => [`file:${m.key}`, `Music: ${m.name}`])];
+    if (v && !opts.some(([k]) => k === v)) opts.push([v, v.startsWith("file:") ? `Music: ${v.split("/").pop()} (file not found)` : `“${v}” (a note only, no sound yet: pick a choice above)`]);
+    return opts.map(([k, l]) => `<option value="${esc(k)}" ${k === v ? "selected" : ""}>${esc(l)}</option>`).join("");
   }
   function renderReelNotes() {
     const notes = reelRev(reelKey).notes || [];

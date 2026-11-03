@@ -46,9 +46,16 @@ XF = 0.4
 
 def env(k):
     v = os.environ.get(k)
-    if not v:
+    for _ in range(3):  # netlify env:get sometimes answers "No value set in the dev context..." for a moment
+        if v and " " not in v:
+            break
         v = subprocess.run(["netlify", "env:get", k], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+        if " " in v:
+            time.sleep(2)
+    if v and " " not in v:
         os.environ[k] = v
+    else:
+        v = ""
     if not v:
         sys.exit(f"Missing {k} (set it, or run inside the linked Netlify project)")
     return v
@@ -269,8 +276,10 @@ def video_preview(full, info, prev_mp4, prev_jpg):
     with tempfile.TemporaryDirectory() as td:
         wm = os.path.join(td, "wm.png")
         watermark_overlay(pw, ph).save(wm)
-        run(["ffmpeg", "-y", "-i", full, "-i", wm, "-filter_complex", f"[0:v]scale={pw}:{ph},fps=30[v];[v][1:v]overlay=0:0",
-             "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "30", "-pix_fmt", "yuv420p", "-movflags", "+faststart", prev_mp4])
+        # the clip's own sound stays in the preview (Keri, Nov 3, 2026: she couldn't hear her Osmo audio)
+        run(["ffmpeg", "-y", "-i", full, "-i", wm, "-filter_complex", f"[0:v]scale={pw}:{ph},fps=30[v];[v][1:v]overlay=0:0[out]",
+             "-map", "[out]", "-map", "0:a:0?", "-c:a", "aac", "-b:a", "96k",
+             "-c:v", "libx264", "-preset", "veryfast", "-crf", "30", "-pix_fmt", "yuv420p", "-movflags", "+faststart", prev_mp4])
     run(["ffmpeg", "-y", "-ss", f"{min(1.0, info['dur'] / 2)}", "-i", prev_mp4, "-frames:v", "1", "-q:v", "4", prev_jpg])
 
 
@@ -394,13 +403,29 @@ def render_reel(site, r2, data, cache, music=None, reel_id=None):
     lens = [(p["out"] - p["in"]) / (p.get("speed") or 1) for p in pieces]
     fade = reel.get("transition", "fade") == "fade"
     total = sum(lens) - (XF * (len(pieces) - 1) if fade else 0)
-    log(f"reel: {len(pieces)} pieces, {total:.1f}s, {'crossfades' if fade else 'hard cuts'}")
+    # Sound (the studio's Sound menu): "file:<R2 key>" = a music file Keri uploaded with the project,
+    # "clips" = each piece's own sound; anything else (empty, or an old free-text note) = silent.
+    # A --music file given on the command line wins.
+    choice = reel.get("music") or ""
+    if not music and choice.startswith("file:"):
+        music = os.path.join(cache["_dir"], "music" + os.path.splitext(choice)[1])
+        if not os.path.exists(music):
+            r2.get(choice[len("file:"):], music)
+    clip_sound = not music and choice == "clips"
+    log(f"reel: {len(pieces)} pieces, {total:.1f}s, {'crossfades' if fade else 'hard cuts'}, "
+        f"sound: {'music ' + os.path.basename(choice) if music else 'the clips' if clip_sound else 'none'}")
     inputs, chains = [], []
     for k, p in enumerate(pieces):
         src = ensure_original(r2, site.slug, p["clip"], cache)
+        if clip_sound:
+            # each piece's own sound, cut to the piece (silence for drone shots with no sound), at its speed
+            speed = p.get("speed") or 1
+            a = (f"[{k}:a]aresample=48000,aformat=channel_layouts=stereo,{atempo(speed) + ',' if speed != 1 else ''}"
+                 if probe(src)["audio"] else f"anullsrc=r=48000:cl=stereo,")
+            chains.append(f"{a}asetpts=PTS-STARTPTS,apad,atrim=0:{lens[k]:.3f}[a{k}]")
         inputs += ["-ss", f"{p['in']}", "-t", f"{p['out'] - p['in']}", "-i", src]
         speed = p.get("speed") or 1
-        f = [f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H}"]
+        f = [f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1"]  # setsar: hard cuts (concat) need equal pixel shapes
         if speed != 1:
             f.append(f"setpts=PTS/{speed}")
             if speed < 1:
@@ -418,6 +443,15 @@ def render_reel(site, r2, data, cache, music=None, reel_id=None):
     else:
         chains.append("".join(f"[v{k}]" for k in range(len(pieces))) + f"concat=n={len(pieces)}:v=1:a=0[x]")
         last = "x"
+    if clip_sound:  # the sound crossfades (or cuts) exactly where the picture does
+        if fade and len(pieces) > 1:
+            alast = "a0"
+            for k in range(1, len(pieces)):
+                chains.append(f"[{alast}][a{k}]acrossfade=d={XF}:c1=tri:c2=tri[ax{k}]")
+                alast = f"ax{k}"
+        else:
+            chains.append("".join(f"[a{k}]" for k in range(len(pieces))) + f"concat=n={len(pieces)}:v=0:a=1[ax]")
+            alast = "ax"
     with tempfile.TemporaryDirectory() as td:
         n = len(pieces)
         title_png, end_png = os.path.join(td, "title.png"), os.path.join(td, "end.png")
@@ -437,20 +471,24 @@ def render_reel(site, r2, data, cache, music=None, reel_id=None):
             cmd += ["-i", music]
             chains.append(f"[{n + 2}:a]atrim=0:{total:.2f},afade=t=in:d=0.5,afade=t=out:st={total - 1.5:.2f}:d=1.5[aout]")
             maps += ["-map", "[aout]", "-c:a", "aac", "-b:a", "192k"]
+        elif clip_sound:
+            chains.append(f"[{alast}]atrim=0:{total:.2f},afade=t=in:d=0.3,afade=t=out:st={max(0, total - 0.8):.2f}:d=0.8[aout]")
+            maps += ["-map", "[aout]", "-c:a", "aac", "-b:a", "192k"]
+        sound = bool(music) or clip_sound
         if any((p.get("speed") or 1) < 1 for p in pieces):
             log("   smoothing slow-motion pieces: this takes a few minutes")
         run(cmd + ["-filter_complex", ";".join(chains), *maps, "-c:v", "libx264", "-preset", "medium", "-crf", "17",
                    "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-t", f"{total:.2f}", full])
         media = os.path.join(ROOT, "public", "media", site.slug)
         if reel_id:
-            return deliver_addon_reel(site, r2, reel_id, reel, full, media, td, W, H, total, n, music)
+            return deliver_addon_reel(site, r2, reel_id, reel, full, media, td, W, H, total, n, sound)
         # watermarked preview for the gallery and studio
         prev = os.path.join(media, "reel-sample.mp4")
         wm = os.path.join(td, "wm.png")
         watermark_overlay(540, 960, center_y=0.72).save(wm)
         run(["ffmpeg", "-y", "-i", full, "-i", wm, "-filter_complex", "[0:v]scale=540:960[v];[v][1:v]overlay=0:0",
              "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-             *(["-c:a", "aac", "-b:a", "96k"] if music else ["-an"]), prev])
+             *(["-c:a", "aac", "-b:a", "96k"] if sound else ["-an"]), prev])
         run(["ffmpeg", "-y", "-ss", "1.6", "-i", prev, "-frames:v", "1", "-q:v", "4", os.path.join(media, "reel-sample.jpg")])
         version = (reel.get("version") or 0) + 1
         cpath = os.path.join(ROOT, "clients", site.slug, "client.json")
@@ -460,17 +498,17 @@ def render_reel(site, r2, data, cache, music=None, reel_id=None):
                 u["preview"], u["poster"] = ver_url(u["preview"], version), ver_url(u["poster"], version)
         json.dump(client, open(cpath, "w"), indent=2)
         msg = f"Updated the reel: {n} pieces, {total:.0f} seconds."
-        if music:
+        if sound:
             r2.put(f"full/{site.slug}/highlight-reel", full, "video/mp4")
             site.call("POST", "/api/admin/upload-done", {"id": "highlight-reel", "name": f"{site.slug}-highlight-reel.mp4", "type": "video/mp4"})
-            msg += " Music added; the full-quality reel is ready for the client."
+            msg += (" Music added" if music else " With the clips' own sound") + "; the full-quality reel is ready for the client."
         else:
-            msg += " No music yet: add a licensed track before it can be delivered."
+            msg += " No sound yet: pick music or the clips' own sound under Sound."
         site.post({"reelStatus": "revised", "reelVersion": version, "reelRendered": reel, "reelNote": {"text": msg}})
-        log(f"   done: preview v{version}, {os.path.getsize(full) / 1e6:.1f} MB full reel {'uploaded' if music else '(not uploaded: no music)'}")
+        log(f"   done: preview v{version}, {os.path.getsize(full) / 1e6:.1f} MB full reel {'uploaded' if sound else '(not uploaded: no sound)'}")
 
 
-def deliver_addon_reel(site, r2, reel_id, reel, full, media, td, W, H, total, n, music):
+def deliver_addon_reel(site, r2, reel_id, reel, full, media, td, W, H, total, n, sound):
     """A re-rendered highlight reel add-on: new preview (cache-busted in the manifest), full file to R2, back to Keri."""
     pw, ph = (960, 540) if W > H else (540, 960)
     wm = os.path.join(td, "wm.png")
@@ -478,7 +516,7 @@ def deliver_addon_reel(site, r2, reel_id, reel, full, media, td, W, H, total, n,
     prev, poster = os.path.join(media, f"{reel_id}.mp4"), os.path.join(media, f"{reel_id}.jpg")
     run(["ffmpeg", "-y", "-i", full, "-i", wm, "-filter_complex", f"[0:v]scale={pw}:{ph}[v];[v][1:v]overlay=0:0",
          "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-         *(["-c:a", "aac", "-b:a", "96k"] if music else ["-an"]), prev])
+         *(["-c:a", "aac", "-b:a", "96k"] if sound else ["-an"]), prev])
     run(["ffmpeg", "-y", "-ss", f"{min(total / 2, 5)}", "-i", prev, "-frames:v", "1", "-q:v", "4", poster])
     version = (reel.get("version") or 1) + 1
     mpath = manifest_path(site.slug)
@@ -492,7 +530,7 @@ def deliver_addon_reel(site, r2, reel_id, reel, full, media, td, W, H, total, n,
     site.call("POST", "/api/admin/upload-done", {"id": reel_id, "name": f"{site.slug}-{reel_id}.mp4", "type": "video/mp4"})
     site.post({"reelId": reel_id, "reelVersion": version, "reelRendered": reel})
     site.post({"id": reel_id, "status": "revised", "note": {"text": f"Updated the reel: {n} pieces, {total:.0f} seconds."
-               + ("" if music else " No music yet: it's silent until a licensed track is added.") + " Take a look and approve it."}})
+               + ("" if sound else " No sound yet: pick music or the clips' own sound under Sound.") + " Take a look and approve it."}})
     log(f"   {reel_id}: v{version}, {total:.1f}s, {os.path.getsize(full) / 1e6:.0f} MB")
 
 
