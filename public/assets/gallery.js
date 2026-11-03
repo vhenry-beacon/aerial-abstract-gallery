@@ -97,7 +97,9 @@
     $("contact").innerHTML = `${c.provider.person}<br><a href="mailto:${c.provider.email}">${c.provider.email}</a>`;
     $("footer").innerHTML = `Questions? ${c.provider.person} · <a href="mailto:${c.provider.email}">${c.provider.email}</a> · ${c.provider.phone}<br>Previews are watermarked and reduced in size. Purchased files are full resolution with no watermark. Usage terms are in your service agreement. Credit ${c.provider.instagram} when you post. We appreciate it.`;
     $("howIncluded").textContent = `Your ${c.package.name} package includes ${c.package.included} deliverables, any mix of clips and photos.`;
-    $("howExtra").textContent = `Want more? Every pick beyond ${c.package.included} is ${money(c.extraPrice)}.`;
+    const reelPrices = [...new Set((c.upsells || []).map((u) => u.price))].sort((a, b) => a - b);
+    $("howExtra").textContent = `Want more? Every photo or video beyond ${c.package.included} is ${money(c.extraPrice)}.` +
+      (reelPrices.length ? ` Highlight reels are add-ons: ${reelPrices.length === 1 ? `${money(reelPrices[0])} each` : `from ${money(reelPrices[0])}`}.` : "");
   }
 
   const ordered = Sections.sort;
@@ -196,11 +198,13 @@
     $("meter").classList.toggle("over", q.extraCount > 0);
 
     // tabs
-    const counts = { all: all.length, clips: clips.length, photos: photos.length, picked: st.selected.length + q.comp.length, owned: Object.keys(st.purchased).length };
+    const ups = c.upsells || [];
+    const counts = { all: all.length, clips: clips.length, photos: photos.length, picked: st.selected.length + q.comp.length, owned: Object.keys(st.purchased).length, addons: ups.length };
     document.querySelectorAll(".tab").forEach((t) => {
       const k = t.dataset.tab;
       t.setAttribute("aria-selected", String(k === tab));
-      const base = { all: "Everything", clips: "Videos", photos: "Pictures", picked: "My picks", owned: "My files" }[k];
+      const base = { all: "Everything", clips: "Videos", photos: "Pictures", picked: "My picks", owned: "My files", addons: "Add-ons" }[k];
+      if (k === "addons") t.classList.toggle("hidden", !ups.length);
       t.textContent = counts[k] ? `${base} (${counts[k]})` : base;
     });
 
@@ -208,7 +212,7 @@
     renderUpsell();
 
     // grids
-    const showClips = tab === "all" || tab === "clips" || tab === "picked";
+    const showClips = tab === "all" || tab === "clips" || tab === "picked";  // the Add-ons tab shows only the add-ons
     const showPhotos = tab === "all" || tab === "photos" || tab === "picked";
     const vc = visible(clips), vp = visible(photos);
     fillGroups($("clipsGrid"), vc);
@@ -241,7 +245,7 @@
   function renderUpsell() {
     const slot = $("upsellSlot");
     const ups = data.client.upsells || [];
-    if (!ups.length || tab === "owned" || tab === "photos") { slot.innerHTML = ""; return; }
+    if (!ups.length || !(tab === "all" || tab === "clips" || tab === "addons")) { slot.innerHTML = ""; return; }
     const groups = [];
     for (const u of ups) {
       const g = u.group || "Highlight reel";

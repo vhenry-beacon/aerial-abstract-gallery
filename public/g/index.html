@@ -53,9 +53,9 @@
         <button class="tab" role="tab" data-tab="photos">Pictures</button>
         <button class="tab" role="tab" data-tab="picked">My picks</button>
         <button class="tab" role="tab" data-tab="owned">My files</button>
+        <button class="tab hidden" role="tab" data-tab="addons">Add-ons</button>
       </nav>
 
-      <div id="upsellSlot"></div>
       <div id="ownedPanel" class="hidden"></div>
 
       <div id="clipsSection">
@@ -67,6 +67,8 @@
         <div id="photosGrid"></div>
       </div>
       <div class="empty hidden" id="emptyMsg"></div>
+      <!-- add-ons (highlight reels) come last: clients pick their photos and videos first -->
+      <div id="upsellSlot"></div>
     </section>
 
     <footer class="wrap" id="footer"></footer>

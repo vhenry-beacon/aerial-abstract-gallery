@@ -3,7 +3,7 @@ import MUSIC_LIBRARY from "../../lib/music-library.json";
 import {
   getClient, listClients, getState, saveState, quote, fulfillOrder, saveOrder, getOrder, listOrders,
   json, signToken, cookieName, setCookieHeader, isClientAuthed, isAdmin, checkAdminPassword, sha256Hex,
-  fileStore, PART_SIZE, stripe, stripeKey, verifyStripeSignature, siteUrl,
+  fileStore, PART_SIZE, welcomeText, stripe, stripeKey, verifyStripeSignature, siteUrl,
   r2, r2Key, r2Presign, r2Head, r2Delete, storageMode, downloadName, zipName,
   r2List, r2MultipartStart, r2PartUrl, r2MultipartParts, r2MultipartComplete, r2MultipartAbort,
   getReview, saveReview, clientCanSee, REVIEW_STATUSES, REEL_FORMATS, withReels, reelList,
@@ -14,19 +14,24 @@ const CLAUDE_STATES = ["waiting", "working", "ready", "problem"];
 
 // A gallery as its client sees it: the deployed config plus the highlight reels Keri approved and priced
 // (prices come from the project page, so changing one needs no deploy).
+// The event name and date also come from the project page, so a rename there shows without a deploy.
 async function liveClient(slug: any) {
   const client = getClient(slug);
-  if (!client || !client.items.some((i: any) => i.reel || i.id === "highlight-reel")) return client;
-  const [review, projects] = await Promise.all([getReview(client.slug), listProjects()]);
+  if (!client) return client;
+  const hasReels = client.items.some((i: any) => i.reel || i.id === "highlight-reel");
+  const [review, projects] = await Promise.all([hasReels ? getReview(client.slug) : null, listProjects()]);
   const project = projects.find((p: any) => p.gallerySlug === client.slug);
-  return withReels(client, review, project?.quote?.addons || []);
+  // reels first, so their default names keep the event name they were made under (Keri can rename them)
+  const c = hasReels ? withReels(client, review, project?.quote?.addons || []) : client;
+  const ev = project?.event || {};
+  return { ...c, eventName: String(ev.name || "").trim() || c.eventName, eventDate: ev.date || c.eventDate };
 }
 const bad = (msg: string, status = 400) => json({ error: msg }, { status });
 
 function publicClient(c: any) {
   return {
     slug: c.slug, clientName: c.clientName, eventName: c.eventName, eventDate: c.eventDate,
-    welcome: c.welcome, provider: c.provider,
+    welcome: welcomeText(c), provider: c.provider,
     package: { name: c.package.name, price: c.package.price, included: c.package.included },
     extraPrice: c.extraPrice,
     upsells: (c.upsells || []).map((u: any) => ({ id: u.id, name: u.name, price: u.price, description: u.description, preview: u.preview, poster: u.poster, unlocks: u.unlocks,
