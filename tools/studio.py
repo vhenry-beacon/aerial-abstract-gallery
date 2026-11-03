@@ -22,7 +22,7 @@ Test site: GALLERY_ENV=staging points every tool (and the netlify commands it ru
 with its own data and R2 bucket. Without it, everything goes to the live site.
 Requires ffmpeg, Pillow, numpy (use the project's .venv).
 """
-import argparse, datetime, hashlib, hmac, http.client, json, os, subprocess, sys, tempfile, time, urllib.parse, urllib.request
+import argparse, datetime, hashlib, hmac, http.client, json, math, os, subprocess, sys, tempfile, time, urllib.parse, urllib.request
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -390,6 +390,13 @@ def text_card(w, h, title, subtitle, y_frac):
     return im
 
 
+LOOP_XF = 1.5  # seconds of crossfade where a looping song starts over
+
+
+def probe_duration(path):
+    return float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path]))
+
+
 def render_reel(site, r2, data, cache, music=None, reel_id=None):
     """The gallery's own reel (review.reel), or with reel_id one of the highlight reel add-ons (review.reels[reel_id]),
     rendered at its shape: vertical 1080x1920, horizontal 3840x2160."""
@@ -468,8 +475,17 @@ def render_reel(site, r2, data, cache, music=None, reel_id=None):
         cmd = ["ffmpeg", "-y", *inputs]
         maps = ["-map", "[vout]"]
         if music:
-            cmd += ["-stream_loop", "-1", "-i", music]  # a song shorter than the reel loops instead of going silent
-            chains.append(f"[{n + 2}:a]atrim=0:{total:.2f},afade=t=in:d=0.5,afade=t=out:st={total - 1.5:.2f}:d=1.5[aout]")
+            # A song shorter than the reel starts over and plays to the end (Vernon, Nov 3, 2026): copies back to back,
+            # each restart crossfaded over the song's own ending so the repeat flows instead of jumping.
+            md = probe_duration(music)
+            copies = 1 if md >= total else math.ceil((total - md) / max(1.0, md - LOOP_XF)) + 1
+            for _ in range(copies):
+                cmd += ["-i", music]
+            mlast = f"{n + 2}:a"
+            for c in range(1, copies):
+                chains.append(f"[{mlast}][{n + 2 + c}:a]acrossfade=d={LOOP_XF}:c1=tri:c2=tri[ml{c}]")
+                mlast = f"ml{c}"
+            chains.append(f"[{mlast}]atrim=0:{total:.2f},afade=t=in:d=0.5,afade=t=out:st={total - 1.5:.2f}:d=1.5[aout]")
             maps += ["-map", "[aout]", "-c:a", "aac", "-b:a", "192k"]
         elif clip_sound:
             chains.append(f"[{alast}]atrim=0:{total:.2f},afade=t=in:d=0.3,afade=t=out:st={max(0, total - 0.8):.2f}:d=0.8[aout]")

@@ -757,7 +757,8 @@
   // sound: the reel's picked sound, or the one being tried; music plays from the start beside the shots
   function reelAudio() {
     let a = $("reelAudio");
-    if (!a) { a = document.createElement("audio"); a.id = "reelAudio"; a.preload = "auto"; $("reelFrame").appendChild(a); }
+    // loop: a song shorter than the reel starts over and plays to the end, as it does in the finished reel
+    if (!a) { a = document.createElement("audio"); a.id = "reelAudio"; a.preload = "auto"; a.loop = true; $("reelFrame").appendChild(a); }
     return a;
   }
   function playReel(k, single, sound = rdraft.music || "") {
