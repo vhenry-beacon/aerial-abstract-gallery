@@ -22,7 +22,7 @@ Test site: GALLERY_ENV=staging points every tool (and the netlify commands it ru
 with its own data and R2 bucket. Without it, everything goes to the live site.
 Requires ffmpeg, Pillow, numpy (use the project's .venv).
 """
-import argparse, datetime, hashlib, hmac, http.client, json, math, os, subprocess, sys, tempfile, time, urllib.parse, urllib.request
+import argparse, datetime, hashlib, hmac, http.client, json, math, os, re, subprocess, sys, tempfile, time, urllib.parse, urllib.request
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -152,9 +152,13 @@ class R2:
                 f.write(chunk)
         conn.close()
 
+    PART = 16 << 20  # multipart piece size for big files
+
     def put(self, key, path, content_type):
-        md5 = hashlib.md5(open(path, "rb").read()).hexdigest()
         size = os.path.getsize(path)
+        if size > 4 * self.PART:  # big files go up in 16 MB pieces, so a dropped connection costs one piece, not the file
+            return self.put_multipart(key, path, content_type, size)
+        md5 = hashlib.md5(open(path, "rb").read()).hexdigest()
         for attempt in range(1, 11):
             if attempt > 1:
                 time.sleep(min(30, 3 * attempt))  # dropped connections come in bursts; wait them out
@@ -169,6 +173,39 @@ class R2:
             except OSError as e:
                 log(f"   upload dropped ({e}), retrying")
         sys.exit(f"upload of {key} failed")
+
+    def put_multipart(self, key, path, content_type, size):
+        """S3 multipart upload, each request retried on its own; checked against the composite ETag at the end
+        (MD5 of the parts' MD5s + "-<parts>"). Written Nov 3, 2026 after a 500 MB reel upload kept dropping."""
+        def call(method, query, headers=None, body=None):
+            for attempt in range(1, 11):
+                if attempt > 1:
+                    time.sleep(min(30, 3 * attempt))
+                try:
+                    conn, r = self._req(method, key, headers, body=body, length=len(body) if body is not None else None, query=query)
+                    data = r.read(); conn.close()
+                    if r.status == 200:
+                        return r, data
+                    log(f"   upload piece refused ({r.status}), retrying")
+                except OSError as e:
+                    log(f"   upload dropped ({e}), retrying")
+            sys.exit(f"upload of {key} failed")
+        _, data = call("POST", {"uploads": ""}, {"content-type": content_type}, b"")
+        upload_id = re.search(rb"<UploadId>(.*?)</UploadId>", data).group(1).decode()
+        parts, md5s = [], []
+        with open(path, "rb") as f:
+            while chunk := f.read(self.PART):
+                md5s.append(hashlib.md5(chunk).digest())
+                r, _ = call("PUT", {"partNumber": len(md5s), "uploadId": upload_id}, body=chunk)
+                parts.append((len(md5s), r.getheader("etag")))
+        xml = ("<CompleteMultipartUpload>" + "".join(f"<Part><PartNumber>{n}</PartNumber><ETag>{e}</ETag></Part>" for n, e in parts)
+               + "</CompleteMultipartUpload>").encode()
+        call("POST", {"uploadId": upload_id}, {"content-type": "application/xml"}, xml)
+        want = hashlib.md5(b"".join(md5s)).hexdigest() + f"-{len(md5s)}"
+        h = self.head(key)
+        if not h or h["size"] != size or h["etag"] != want:
+            sys.exit(f"upload of {key} didn't check out after uploading")
+        return size
 
     def copy(self, src, dst):
         conn, r = self._req("PUT", dst, {"x-amz-copy-source": f"/{self.bucket}/{urllib.parse.quote(src, safe='/~')}"})
