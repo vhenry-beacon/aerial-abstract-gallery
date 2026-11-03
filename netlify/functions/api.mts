@@ -1,4 +1,5 @@
 import type { Config, Context } from "@netlify/functions";
+import MUSIC_LIBRARY from "../../lib/music-library.json";
 import {
   getClient, listClients, getState, saveState, quote, fulfillOrder, saveOrder, getOrder, listOrders,
   json, signToken, cookieName, setCookieHeader, isClientAuthed, isAdmin, checkAdminPassword, sha256Hex,
@@ -499,12 +500,15 @@ export default async (req: Request, context: Context) => {
         for (const [rid, rp] of Object.entries(review.reels || {})) if (flags[rid]) flags[rid].waiting ||= reelWaiting(rp);
         const project = (await listProjects()).find((p: any) => p.gallerySlug === slug);
         // music Keri uploaded with the project's files (any folder): the reels' Music menu offers these
+        // with a 6-hour private link each, so the studio can play a track with the reel before Keri picks it
         const music = project && r2()
-          ? (await r2List(`raw/${project.id}/`)).files.filter((f: any) => /\.(mp3|m4a|wav|aac|aiff?|flac)$/i.test(f.key))
-              .map((f: any) => ({ key: f.key, name: f.key.split("/").pop(), size: f.size }))
+          ? await Promise.all((await r2List(`raw/${project.id}/`)).files.filter((f: any) => /\.(mp3|m4a|wav|aac|aiff?|flac)$/i.test(f.key))
+              .map(async (f: any) => ({ key: f.key, name: f.key.split("/").pop(), size: f.size, url: await r2Presign("GET", f.key, 6 * 3600) })))
           : [];
+        // Aerial Abstract's own royalty-free tracks (tools/compose_music.py)
+        const library = r2() ? await Promise.all((MUSIC_LIBRARY as any[]).map(async (t: any) => ({ ...t, url: await r2Presign("GET", t.key, 6 * 3600) }))) : [];
         return json({
-          client: publicClient(client), review, flags, worker: await getWorker(), music, reels: reelList(client, review),
+          client: publicClient(client), review, flags, worker: await getWorker(), music, library, reels: reelList(client, review),
           project: project ? { id: project.id, name: project.name, addons: project.quote?.addons || [] } : null,
           items: client.items.map((i: any) => ({ ...i, ready: !!metas[i.id] })),
         });

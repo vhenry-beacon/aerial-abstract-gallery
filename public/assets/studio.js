@@ -461,7 +461,7 @@
       <button class="btn comp small ${ad ? "is-on" : ""}" id="reelAddon" type="button" title="Sell this reel to the client as an add-on, at the price of the add-on you pick">💲 Add-on</button>
       ${ad && addonList().length > 1 ? `<select class="field st-addon-pick" id="reelAddonPick" aria-label="Sell as">${addonList().map((a) =>
         `<option value="${esc(a.name)}" ${a.name === ad ? "selected" : ""}>${esc(a.name)} · ${money(a.price)}</option>`).join("")}</select>` : ""}`;
-    renderTimeline(); renderPiece(); renderReelForm(); renderReelNotes(); markReelDirty();
+    renderTimeline(); renderPiece(); renderReelForm(); renderTrySounds(); renderReelNotes(); markReelDirty();
     $("clipPick").innerHTML = clips().map((c) => `<button data-addclip="${esc(c.id)}" type="button"><img src="${esc(c.poster)}" alt="">${esc(c.title)} · ${secs(c.duration)}</button>`).join("");
     showReelFrame(0);
   }
@@ -502,16 +502,41 @@
       <span>Transitions</span><select class="field" data-rf="transition"><option value="fade" ${rdraft.transition === "fade" ? "selected" : ""}>Soft crossfade</option><option value="cut" ${rdraft.transition === "cut" ? "selected" : ""}>Hard cut</option></select>
       <span>Overall look</span><select class="field" data-rf="look">${lookOpts}</select>
       <span>Sound</span><select class="field" data-rf="music">${musicOptions()}</select>
+      <span>Try sounds</span><div class="st-try" id="trySounds"></div>
       <span></span><span class="st-small st-muted">To add a song, upload the music file you have a license for in the project's
         ${D.project ? `<a href="/admin/project/?id=${encodeURIComponent(D.project.id)}" target="_blank">Files box</a>` : "Files box"} (any folder), then pick it here.</span>`;
   }
   // What the reel sounds like: "" silent, "clips" = each piece's own sound, "file:<cloud key>" = a music file Keri
   // uploaded with the project. Anything else is an old free-text note ("Fun family sounds"), which adds no sound.
+  // Every sound a reel can have: none, the clips' own, Aerial Abstract's royalty-free tracks (D.library), or music
+  // Keri uploaded with the project (D.music). Each with a playable link for "Try" (6-hour private links).
+  function soundChoices() {
+    return [
+      { value: "", title: "No sound" },
+      { value: "clips", title: "The clips' own sound", mood: "The festival as it sounded (Osmo clips; drone shots are silent)" },
+      ...(D.library || []).map((t) => ({ value: `file:${t.key}`, title: t.title, mood: t.mood, goodFor: t.goodFor, url: t.url, group: "Aerial Abstract music · royalty-free" })),
+      ...(D.music || []).map((m) => ({ value: `file:${m.key}`, title: m.name, mood: "Your uploaded music", url: m.url, group: "Your music" })),
+    ];
+  }
+  const soundTitle = (v) => soundChoices().find((c) => c.value === v)?.title;
   function musicOptions() {
-    const v = rdraft.music || "";
-    const opts = [["", "No sound"], ["clips", "The clips' own sound"], ...(D.music || []).map((m) => [`file:${m.key}`, `Music: ${m.name}`])];
-    if (v && !opts.some(([k]) => k === v)) opts.push([v, v.startsWith("file:") ? `Music: ${v.split("/").pop()} (file not found)` : `“${v}” (a note only, no sound yet: pick a choice above)`]);
-    return opts.map(([k, l]) => `<option value="${esc(k)}" ${k === v ? "selected" : ""}>${esc(l)}</option>`).join("");
+    const v = rdraft.music || "", cs = soundChoices();
+    const opt = (c) => `<option value="${esc(c.value)}" ${c.value === v ? "selected" : ""}>${esc(c.title)}${c.mood && c.group ? ` · ${esc(c.mood)}` : ""}</option>`;
+    let html = cs.filter((c) => !c.group).map(opt).join("");
+    for (const g of [...new Set(cs.filter((c) => c.group).map((c) => c.group))]) html += `<optgroup label="${esc(g)}">${cs.filter((c) => c.group === g).map(opt).join("")}</optgroup>`;
+    if (v && !cs.some((c) => c.value === v)) html += `<option value="${esc(v)}" selected>${v.startsWith("file:") ? `${esc(v.split("/").pop())} (file not found)` : `“${esc(v)}” (a note only, no sound yet: pick a choice above)`}</option>`;
+    return html;
+  }
+  // "Try sounds": hear the reel with a sound before picking it (nothing is saved until Use this + Save reel changes)
+  function renderTrySounds() {
+    const el = $("trySounds"); if (!el) return;
+    el.innerHTML = soundChoices().filter((c) => c.value).map((c) => {
+      const on = seq.playing && !seq.single && seq.sound === c.value, picked = (rdraft.music || "") === c.value;
+      return `<div class="st-try-row ${picked ? "picked" : ""}">
+        <button class="btn ghost small" data-try="${esc(c.value)}" type="button">${on ? "■ Stop" : "▶ Try"}</button>
+        <span><b>${esc(c.title)}</b>${c.mood ? ` · ${esc(c.mood)}` : ""}${c.goodFor ? `<br><span class="st-muted">Good for: ${esc(c.goodFor)}</span>` : ""}</span>
+        ${picked ? `<span class="st-small">✓ Picked</span>` : `<button class="btn small" data-usesound="${esc(c.value)}" type="button">Use this</button>`}</div>`;
+    }).join("");
   }
   function renderReelNotes() {
     const notes = reelRev(reelKey).notes || [];
@@ -557,6 +582,14 @@
       if (!same(rdraft, reelFromReview()) && !confirm("This reel has unsaved changes. Switch reels anyway?")) return;
       stopReel(); reelKey = t.dataset.reelkey; rdraft = reelFromReview(); pieceIdx = rdraft.pieces.length ? 0 : -1; renderReel();
     }
+    else if (t.dataset.try !== undefined) {
+      const was = seq.playing && !seq.single && seq.sound === t.dataset.try;
+      stopReel(); if (!was) playReel(0, false, t.dataset.try);
+    }
+    else if (t.dataset.usesound !== undefined) {
+      rdraft.music = t.dataset.usesound; renderReelForm(); renderTrySounds(); markReelDirty();
+      toast(`Picked “${soundTitle(rdraft.music)}”. Press Save reel changes to make it.`);
+    }
     else if (t.id === "reelNameSave") {
       const v = $("reelName").value.trim();
       if (await save({ id: reelItemId(reelKey), name: v }, v ? `Renamed to “${v}”` : "Back to the default name")) renderReel();
@@ -595,7 +628,7 @@
       if (k === "look") rdraft.look = t.value === "original" ? null : { preset: t.value };
       else rdraft[k] = t.value;
       if (k === "look") renderTimeline();
-      markReelDirty(); if (k === "transition") renderTimeline();
+      markReelDirty(); if (k === "transition") renderTimeline(); if (k === "music") renderTrySounds();
     }
   });
   $("tab-reel").addEventListener("change", async (e) => {
@@ -664,6 +697,7 @@
     const nxt = await prepare(k), cur = curV();
     seq.prep = null;
     nxt.playbackRate = p.speed || 1; nxt.style.filter = Looks.cssFilter(p.look || rdraft.look);
+    nxt.muted = !(seq.playing && seq.sound === "clips"); if (cur !== nxt) cur.muted = true;
     if (then) await then(nxt);
     nxt.style.opacity = "1";
     if (cur !== nxt) { cur.style.opacity = "0"; cur.pause(); }
@@ -675,16 +709,29 @@
     o.innerHTML = rdraft.title ? `<div class="t1">${esc(rdraft.title)}</div>${rdraft.subtitle ? `<div class="t2">${esc(rdraft.subtitle)}</div>` : ""}` : "";
     o.style.opacity = t < 4.2 && rdraft.title ? "1" : "0";
   }
-  function playReel(k, single) {
+  // sound: the reel's picked sound, or the one being tried; music plays from the start beside the shots
+  function reelAudio() {
+    let a = $("reelAudio");
+    if (!a) { a = document.createElement("audio"); a.id = "reelAudio"; a.preload = "auto"; $("reelFrame").appendChild(a); }
+    return a;
+  }
+  function playReel(k, single, sound = rdraft.music || "") {
     if (!rdraft.pieces.length) return;
-    seq.playing = true; seq.i = k; seq.single = single;
+    seq.playing = true; seq.i = k; seq.single = single; seq.sound = sound;
     $("reelPlay").textContent = "■ Stop";
+    const url = !single && soundChoices().find((c) => c.value === sound)?.url;
+    const a = reelAudio();
+    if (url) { if (a.src !== url) a.src = url; a.currentTime = 0; a.play().catch(() => {}); } else a.pause();
     loadPiece(k, (v) => v.play().catch(() => {}));
     cancelAnimationFrame(seq.raf); seq.raf = requestAnimationFrame(tick);
+    renderTrySounds();
   }
   function stopReel() {
+    const was = seq.playing;
     seq.playing = false; cancelAnimationFrame(seq.raf);
     for (const v of [R.a, R.b]) if (v) v.pause();
+    $("reelAudio")?.pause();
+    if (was) renderTrySounds();
     if ($("reelPlay")) $("reelPlay").textContent = "▶ Play reel";
     for (const b of $("timeline")?.children || []) b.classList.remove("playing");
   }

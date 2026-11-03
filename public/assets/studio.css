@@ -201,3 +201,6 @@ code { background: var(--gold-soft); padding: 1px 6px; border-radius: 6px; font-
 .st-reel-desc i { color: var(--ink); }
 .st-frame.wide { aspect-ratio: 16/9; max-height: 56vh; }
 .st-addon-pick { width: auto; padding: 6px 8px; margin: 0; font-size: 13px; }
+.st-try { display: grid; gap: 6px; max-height: 260px; overflow: auto; }
+.st-try-row { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; font-size: 13px; padding: 4px 6px; border-radius: 8px; }
+.st-try-row.picked { background: var(--gold-soft); }

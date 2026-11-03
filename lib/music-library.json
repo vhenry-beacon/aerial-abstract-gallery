@@ -1,0 +1,62 @@
+[
+ {
+  "id": "golden-hour",
+  "title": "Golden Hour",
+  "mood": "Warm and uplifting \u00b7 plucked guitar",
+  "goodFor": "Family moments, the crowd, opening shots",
+  "bpm": 108,
+  "seconds": 100,
+  "key": "music/library/golden-hour.m4a",
+  "source": "Original, made for Aerial Abstract. Free to use in any client video."
+ },
+ {
+  "id": "festival-lights",
+  "title": "Festival Lights",
+  "mood": "Bright and upbeat \u00b7 piano and claps",
+  "goodFor": "Fast social reels, bounce houses, kids playing",
+  "bpm": 120,
+  "seconds": 100,
+  "key": "music/library/festival-lights.m4a",
+  "source": "Original, made for Aerial Abstract. Free to use in any client video."
+ },
+ {
+  "id": "gathering",
+  "title": "Gathering",
+  "mood": "Cinematic and warm \u00b7 builds slowly",
+  "goodFor": "Website and YouTube reels, the building, drone flyovers",
+  "bpm": 84,
+  "seconds": 100,
+  "key": "music/library/gathering.m4a",
+  "source": "Original, made for Aerial Abstract. Free to use in any client video."
+ },
+ {
+  "id": "little-moments",
+  "title": "Little Moments",
+  "mood": "Playful \u00b7 marimba and snaps",
+  "goodFor": "Kids, face painting, balloons, short reels",
+  "bpm": 104,
+  "seconds": 100,
+  "key": "music/library/little-moments.m4a",
+  "source": "Original, made for Aerial Abstract. Free to use in any client video."
+ },
+ {
+  "id": "frame-drum",
+  "title": "Frame Drum",
+  "mood": "Percussion only \u00b7 no melody instruments",
+  "goodFor": "Clients who prefer no musical instruments; energetic and respectful",
+  "bpm": 96,
+  "seconds": 100,
+  "key": "music/library/frame-drum.m4a",
+  "source": "Original, made for Aerial Abstract. Free to use in any client video."
+ },
+ {
+  "id": "evening-glow",
+  "title": "Evening Glow",
+  "mood": "Mellow lo-fi \u00b7 electric piano",
+  "goodFor": "Sunset shots, slower vertical reels",
+  "bpm": 82,
+  "seconds": 100,
+  "key": "music/library/evening-glow.m4a",
+  "source": "Original, made for Aerial Abstract. Free to use in any client video."
+ }
+]

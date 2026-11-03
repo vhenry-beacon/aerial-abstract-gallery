@@ -468,7 +468,7 @@ def render_reel(site, r2, data, cache, music=None, reel_id=None):
         cmd = ["ffmpeg", "-y", *inputs]
         maps = ["-map", "[vout]"]
         if music:
-            cmd += ["-i", music]
+            cmd += ["-stream_loop", "-1", "-i", music]  # a song shorter than the reel loops instead of going silent
             chains.append(f"[{n + 2}:a]atrim=0:{total:.2f},afade=t=in:d=0.5,afade=t=out:st={total - 1.5:.2f}:d=1.5[aout]")
             maps += ["-map", "[aout]", "-c:a", "aac", "-b:a", "192k"]
         elif clip_sound:
