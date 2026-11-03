@@ -15,6 +15,7 @@
   let slug = null, D = null, tab = "items", filter = "all";
   let curId = null, draft = null;   // item being edited and its unsaved edit
   let rdraft = null, pieceIdx = -1; // unsaved reel plan and selected piece
+  const picked = new Set();          // files Keri ticked to download in full quality for herself
 
   async function api(path, opts = {}) {
     const res = await fetch(path, { credentials: "same-origin", headers: { "content-type": "application/json" }, ...opts });
@@ -47,7 +48,7 @@
   });
   $("client").addEventListener("change", () => {
     if (unsaved() && !confirm("You have unsaved changes. Switch galleries anyway?")) { $("client").value = slug; return; }
-    slug = $("client").value; curId = null; draft = null; rdraft = null; load();
+    slug = $("client").value; curId = null; draft = null; rdraft = null; picked.clear(); load();
   });
 
   async function load() {
@@ -181,6 +182,7 @@
       const r = rev(i.id);
       const userNotes = r.notes.filter((n) => n.by === "Keri").length;
       return `<button class="st-thumb ${i.id === curId ? "on" : ""}" data-id="${esc(i.id)}" type="button">
+        ${pickBox(i)}
         <img src="${esc(thumbOf(i))}" alt="" loading="lazy" style="filter:${Looks.cssFilter(r.edit?.look)}">
         ${pill(r, editWaiting(r))}
         ${userNotes ? `<span class="notes">💬 ${userNotes}</span>` : ""}
@@ -193,11 +195,102 @@
       return `<h3 class="st-sec">${title} · ${xs.length}</h3>` + gs.map((g) =>
         `${gs.length > 1 ? `<div class="st-subsec">${g.label} · ${g.items.length}</div>` : ""}${g.items.map(thumb).join("")}`).join("");
     };
+    const readyShown = list.filter((i) => i.ready);
+    if (readyShown.length) $("filters").innerHTML += `<button class="st-chip st-pick-all" id="pickAll" type="button">${
+      readyShown.every((i) => picked.has(i.id)) ? "☐ Unselect these" : "☑ Select all shown"} to download</button>`;
     $("grid").innerHTML = part("Videos", list.filter((i) => i.type === "video")) + part("Pictures", list.filter((i) => i.type !== "video"))
       || `<p class="empty">Nothing here.</p>`;
+    renderPickBar();
+  }
+
+  // ---------- Keri's own full-quality downloads ----------
+  // A tick box on each finished file (and on each reel); the bar at the bottom downloads the ticked ones,
+  // one file directly or several as one zip (public/zip-sw.js), bought by the client or not.
+  const pickBox = (i) => (i.ready
+    ? `<span class="st-pick ${picked.has(i.id) ? "on" : ""}" data-pick="${esc(i.id)}" role="checkbox" aria-checked="${picked.has(i.id)}" title="Select to download in full quality">${picked.has(i.id) ? "✓" : ""}</span>`
+    : "");
+  function togglePick(id) {
+    picked.has(id) ? picked.delete(id) : picked.add(id);
+    renderItems(); renderReelPickBtn();
+  }
+  function renderPickBar() {
+    let bar = $("pickBar");
+    if (!bar) {
+      bar = document.createElement("div"); bar.id = "pickBar"; bar.className = "st-pickbar";
+      document.body.appendChild(bar);
+      bar.addEventListener("click", (e) => {
+        if (e.target.closest("#pickClear")) { picked.clear(); renderItems(); renderReelPickBtn(); }
+        if (e.target.closest("#pickGo")) downloadPicked(e.target.closest("#pickGo"));
+      });
+    }
+    const ids = [...picked].filter((id) => item(id)?.ready);
+    bar.classList.toggle("hidden", !ids.length);
+    const v = ids.filter((id) => item(id).type === "video").length, p = ids.length - v;
+    const what = [v && `${v} video${v === 1 ? "" : "s"}`, p && `${p} picture${p === 1 ? "" : "s"}`].filter(Boolean).join(" and ");
+    bar.innerHTML = `<span>${what} selected</span>
+      <button class="btn small" id="pickGo" type="button">⬇ Download full quality</button>
+      <button class="btn ghost small" id="pickClear" type="button">Clear</button>`;
+  }
+  async function downloadPicked(btn) {
+    const ids = [...picked].filter((id) => item(id)?.ready);
+    if (!ids.length) return;
+    const dl = (id) => openHidden(`/dl/${encodeURIComponent(slug)}/${encodeURIComponent(id)}`);
+    btn.disabled = true;
+    try {
+      if (ids.length === 1) { dl(ids[0]); toast("Downloading the full-quality file."); return; }
+      const r = await api(`/api/download-list?slug=${encodeURIComponent(slug)}&ids=${encodeURIComponent(ids.join(","))}`);
+      if (!r.ok || !r.body.files?.length) throw new Error(r.body.error || "Those files aren't ready to download yet.");
+      const mb = r.body.files.reduce((t, f) => t + (f.size || 0), 0) / 1e6;
+      const size = mb >= 1000 ? `${(mb / 1000).toFixed(1)} GB` : `${Math.max(1, Math.round(mb))} MB`;
+      if (await zipWorkerReady()) {
+        openHidden(`/zip-studio/${encodeURIComponent(slug)}/${encodeURIComponent(r.body.zipName)}?ids=${encodeURIComponent(ids.join(","))}`);
+        toast(`Downloading one zip file (${r.body.files.length} files, ${size}). Keep this page open until your browser says it's done.`, 9000);
+      } else {
+        toast(`Starting ${ids.length} downloads. If your browser asks to allow multiple downloads, choose Allow.`, 8000);
+        for (const id of ids) { dl(id); await new Promise((res) => setTimeout(res, 1500)); }
+      }
+    } catch (err) {
+      toast(err.message || "Couldn't start the download. Please try again.", 8000);
+    } finally { btn.disabled = false; }
+  }
+  // the response is an attachment, so a hidden frame saves it and the studio stays put
+  function openHidden(src) {
+    const f = document.createElement("iframe");
+    f.hidden = true; f.src = src;
+    document.body.appendChild(f);
+    setTimeout(() => f.remove(), 120000);
+  }
+  async function zipWorkerReady() {
+    if (!("serviceWorker" in navigator) || !window.ReadableStream) return false;
+    try {
+      const reg = await navigator.serviceWorker.register("/zip-sw.js", { scope: "/zip-studio/" });
+      const sw = reg.active || reg.waiting || reg.installing;
+      if (!sw) return false;
+      if (sw.state !== "activated") await new Promise((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error("timeout")), 10000);
+        sw.addEventListener("statechange", () => {
+          if (sw.state === "activated") { clearTimeout(t); resolve(); }
+          if (sw.state === "redundant") { clearTimeout(t); reject(new Error("redundant")); }
+        });
+      });
+      return true;
+    } catch { return false; }
+  }
+  // the reel tab's own tick box, for the reel on screen
+  function renderReelPickBtn() {
+    const b = $("reelPickDl"); if (!b) return;
+    const on = picked.has(reelItemId(reelKey));
+    b.classList.toggle("is-on", on);
+    b.textContent = on ? "✓ Selected to download" : "⬇ Select to download";
   }
   $("filters").addEventListener("click", async (e) => {
     if (e.target.closest("#undoAll")) return undoAll();
+    if (e.target.closest("#pickAll")) {
+      const shownIds = [...document.querySelectorAll("#grid [data-pick]")].map((b) => b.dataset.pick);
+      const all = shownIds.every((id) => picked.has(id));
+      shownIds.forEach((id) => (all ? picked.delete(id) : picked.add(id)));
+      return renderItems();
+    }
     const b = e.target.closest("[data-f]"); if (b) { filter = b.dataset.f; renderItems(); }
   });
   // every photo and clip back to its original (the reel is separate); approvals and notes stay
@@ -211,6 +304,7 @@
     toast(`${ok} item${ok === 1 ? "" : "s"} going back to the original. The final files are restored within 15 minutes.`, 5000);
   }
   $("grid").addEventListener("click", (e) => {
+    const pk = e.target.closest("[data-pick]"); if (pk) return togglePick(pk.dataset.pick);
     const b = e.target.closest(".st-thumb"); if (!b) return;
     if (curId && curId !== b.dataset.id && !same(draft, editOf(curId)) && !confirm("You have unsaved changes on this item. Leave without saving?")) return;
     openItem(b.dataset.id);
@@ -458,9 +552,11 @@
       <button class="btn approve small ${r.status === "approved" ? "is-on" : ""}" data-rstatus="approved" type="button">✓ Approve reel</button>
       <button class="btn edits small ${r.status === "edits" ? "is-on" : ""}" data-rstatus="edits" type="button">Needs edits</button>
       ${it ? `<button class="btn remove small ${r.status === "remove" ? "is-on" : ""}" data-rstatus="remove" type="button">Don't offer</button>` : ""}
+      ${item(reelItemId(reelKey))?.ready ? `<button class="btn ghost small" id="reelPickDl" type="button" title="Add the finished reel to your full-quality download"></button>` : ""}
       <button class="btn comp small ${ad ? "is-on" : ""}" id="reelAddon" type="button" title="Sell this reel to the client as an add-on, at the price of the add-on you pick">💲 Add-on</button>
       ${ad && addonList().length > 1 ? `<select class="field st-addon-pick" id="reelAddonPick" aria-label="Sell as">${addonList().map((a) =>
         `<option value="${esc(a.name)}" ${a.name === ad ? "selected" : ""}>${esc(a.name)} · ${money(a.price)}</option>`).join("")}</select>` : ""}`;
+    renderReelPickBtn();
     renderTimeline(); renderPiece(); renderReelForm(); renderTrySounds(); renderMakeMusic(); renderReelNotes(); markReelDirty();
     $("clipPick").innerHTML = clips().map((c) => `<button data-addclip="${esc(c.id)}" type="button"><img src="${esc(c.poster)}" alt="">${esc(c.title)} · ${secs(c.duration)}</button>`).join("");
     showReelFrame(0);
@@ -639,6 +735,7 @@
       const v = $("reelName").value.trim();
       if (await save({ id: reelItemId(reelKey), name: v }, v ? `Renamed to “${v}”` : "Back to the default name")) renderReel();
     }
+    else if (t.id === "reelPickDl") togglePick(reelItemId(reelKey));
     else if (t.id === "reelAddon") {
       const on = !reelAddon(reelKey), list = addonList();
       if (on && !list.length) return alert("First add a highlight reel add-on with its price under Add-ons on the project page.");

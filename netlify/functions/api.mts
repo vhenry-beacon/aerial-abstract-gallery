@@ -267,17 +267,21 @@ export default async (req: Request, context: Context) => {
 
     // Every purchased, ready file with its friendly name, size and a 6-hour link: feeds the "Download all" zip
     // (public/zip-sw.js builds the zip in the browser, so nothing large runs on the server).
+    // With ?ids=a,b and Keri signed in: those files, bought or not (the studio's "Download full quality").
     if (route === "download-list" && m === "GET") {
       const client = getClient(url.searchParams.get("slug"));
       if (!client) return bad("Gallery not found", 404);
       if (!(await isClientAuthed(req, client.slug))) return bad("Please sign in", 401);
+      const ids = url.searchParams.get("ids");
+      if (ids && !(await isAdmin(req))) return bad("Please sign in to the studio", 401);
+      const want = ids ? new Set(ids.split(",")) : null;
       const state = await getState(client);
       const metas = await fileMetas(client.slug);
       const files: any[] = [];
       const used = new Set<string>();
       for (const item of client.items) {
         const meta = metas[item.id];
-        if (!state.purchased[item.id] || !meta) continue;
+        if (!meta || (want ? !want.has(item.id) : !state.purchased[item.id])) continue;
         let name = downloadName(client, item, meta.filename);
         for (let n = 2; used.has(name.toLowerCase()); n++) name = name.replace(/( \(\d+\))?(\.\w+)$/, ` (${n})$2`);
         used.add(name.toLowerCase());

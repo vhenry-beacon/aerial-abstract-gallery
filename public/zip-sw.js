@@ -1,6 +1,6 @@
 // "Download all" as one zip, built in the browser while it downloads (nothing large runs on the server).
 // The gallery page registers this for /zip/ only, then opens /zip/<slug>/<name>.zip; we answer that request with
-// a streamed zip of the client's purchased files, fetched straight from R2. Library: client-zip 2.5.1 (MIT).
+// a streamed zip of the client's purchased files (or, from the studio, ?ids= Keri picked), fetched straight from R2. Library: client-zip 2.5.1 (MIT).
 importScripts("/assets/vendor/client-zip-2.5.1.worker.js");
 
 self.addEventListener("install", () => self.skipWaiting());
@@ -8,9 +8,10 @@ self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
-  const m = url.pathname.match(/^\/zip\/([^/]+)\/[^/]+\.zip$/);
+  // /zip-studio/ is the studio's own registration, so it always runs this version (it knows ?ids=)
+  const m = url.pathname.match(/^\/zip(?:-studio)?\/([^/]+)\/[^/]+\.zip$/);
   if (!m) return;
-  event.respondWith(zipResponse(event, decodeURIComponent(m[1])));
+  event.respondWith(zipResponse(event, decodeURIComponent(m[1]), url.searchParams.get("ids")));
 });
 
 function problem(msg, status = 500) {
@@ -18,8 +19,8 @@ function problem(msg, status = 500) {
     { status, headers: { "content-type": "text/html; charset=utf-8" } });
 }
 
-async function zipResponse(event, slug) {
-  const res = await fetch(`/api/download-list?slug=${encodeURIComponent(slug)}`, { credentials: "same-origin" });
+async function zipResponse(event, slug, ids) {
+  const res = await fetch(`/api/download-list?slug=${encodeURIComponent(slug)}${ids ? `&ids=${encodeURIComponent(ids)}` : ""}`, { credentials: "same-origin" });
   if (!res.ok) return problem(res.status === 401 ? "Please sign in to the gallery first." : "Couldn't get your files. Please try again.", res.status);
   const { zipName, files } = await res.json();
   if (!files.length) return problem("There are no files to download yet.", 404);
