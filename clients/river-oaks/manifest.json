@@ -1986,7 +1986,7 @@
       "title": "Social media reel \u00b7 30 seconds",
       "reel": "social-30",
       "upsellOnly": true,
-      "duration": 30.0,
+      "duration": 26.3,
       "orientation": "portrait",
       "width": 1080,
       "height": 1920,
@@ -2001,10 +2001,10 @@
         "ground-24",
         "wide-07"
       ],
-      "version": 1,
+      "version": 2,
       "fullFile": "reel-social-30.mp4",
-      "preview": "/media/river-oaks/reel-social-30.mp4?v=1",
-      "poster": "/media/river-oaks/reel-social-30.jpg?v=1"
+      "preview": "/media/river-oaks/reel-social-30.mp4?v=2",
+      "poster": "/media/river-oaks/reel-social-30.jpg?v=2"
     },
     {
       "id": "reel-social-60",
