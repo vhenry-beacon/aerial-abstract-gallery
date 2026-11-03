@@ -195,6 +195,9 @@ code { background: var(--gold-soft); padding: 1px 6px; border-radius: 6px; font-
 .st-reel-grp { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .st-reel-grp > span { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; margin-right: 2px; }
 .st-reel-grp > span:empty { display: none; }
-.st-reel-info { margin: 0 0 10px; color: var(--ink-2); }
+.st-reel-info { margin: 0 0 10px; color: var(--ink-2); display: grid; gap: 6px; }
+.st-reel-name { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-weight: 600; color: var(--ink); }
+.st-reel-name .field { flex: 1 1 260px; max-width: 420px; margin: 0; padding: 7px 10px; font-weight: 400; }
+.st-reel-desc i { color: var(--ink); }
 .st-frame.wide { aspect-ratio: 16/9; max-height: 56vh; }
 .st-addon-pick { width: auto; padding: 6px 8px; margin: 0; font-size: 13px; }

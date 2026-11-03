@@ -408,9 +408,13 @@
   const reelAddon = (k) => D.review.items[reelItemId(k)]?.addon || null;  // the quote add-on it sells as
   const addonList = () => (D.project?.addons || []).filter((a) => a.name);
   const money = (c) => `$${(c / 100).toLocaleString()}`;
-  const reelName = (k) => (k === "legacy" ? "Your reel" : item(k).title.replace(/^.* reel · /, ""));
-  const reelTarget = (k) => (k === "legacy" ? null : item(k).duration && REEL_SECONDS[item(k).reel]);
-  const REEL_SECONDS = { "web-30": 30, "web-60": 60, "web-90": 90, "social-7": 7, "social-15": 15, "social-30": 30, "social-60": 60 };
+  // the name the client sees: Keri's (review.items[id].name) or the default from the server ("Fall Festival Vertical Reel 2")
+  const reelInfoOf = (k) => (D.reels || []).find((r) => r.id === reelItemId(k)) || {};
+  const reelName = (k) => D.review.items[reelItemId(k)]?.name || reelInfoOf(k).defaultName || (k === "legacy" ? "Your reel" : item(k).title);
+  const reelVertical = (k) => k === "legacy" || item(k).orientation !== "landscape";
+  // mirrors aboutLength() in lib/core.mjs: what the client's description says
+  const aboutLen = (s) => (!(s > 0) ? "A short reel" : s < 60 ? `About ${s < 12 ? Math.round(s) : Math.round(s / 5) * 5} seconds`
+    : (() => { const m = Math.round(s / 30) / 2; return `About ${m === 1 ? "1 minute" : `${Math.floor(m)}${m % 1 ? "½" : ""} minutes`}`; })());
   let reelKey = "legacy";
   function reelFromReview() {
     const r = planOf(reelKey);
@@ -428,10 +432,8 @@
     const chip = (k) => { const r = reelRev(k);
       return `<button class="st-chip ${k === reelKey ? "on" : ""}" data-reelkey="${esc(k)}" type="button">${esc(reelName(k))}${reelAddon(k) ? " 💲" : ""}${r.status === "approved" ? " ✓" : reelWait(k) ? " ⏳" : ""}</button>`; };
     const group = (label, ks) => (ks.length ? `<div class="st-reel-grp"><span>${label}</span>${ks.map(chip).join("")}</div>` : "");
-    const ks = reelKeys(), adds = addonReels();
-    $("reelPick").innerHTML = group("", ks.filter((k) => k === "legacy"))
-      + group("Website &amp; YouTube", adds.filter((i) => i.orientation === "landscape").map((i) => i.id))
-      + group("Social media", adds.filter((i) => i.orientation !== "landscape").map((i) => i.id));
+    const ks = reelKeys();
+    $("reelPick").innerHTML = group("Vertical", ks.filter(reelVertical)) + group("Horizontal", ks.filter((k) => !reelVertical(k)));
   }
   function renderReel() {
     if (!D) return;
@@ -446,9 +448,12 @@
       : !(adObj.price > 0) ? `⚠️ “${esc(ad)}” has no price on the project page yet.`
       : r.status === "approved" ? `✅ Offered to the client as an add-on at ${money(adObj.price)}.`
       : `Add-on at ${money(adObj.price)} once you approve it.`;
-    $("reelInfo").innerHTML = (it
-      ? `<b>${esc(it.title)}</b> · ${it.orientation === "landscape" ? "horizontal" : "vertical"} · aim for ${clock(reelTarget(reelKey))}. `
-      : `<b>Your reel</b> · vertical. `) + `${sale} <a href="${esc(watch)}" target="_blank">▶ Watch the finished version</a>`;
+    const shape = reelVertical(reelKey) ? "vertical (9:16), sized for Reels, TikTok and Stories" : "horizontal (16:9), for your website and YouTube";
+    $("reelInfo").innerHTML = `<label class="st-reel-name">Name the client sees
+        <input class="field" id="reelName" maxlength="80" value="${esc(reelName(reelKey))}" placeholder="${esc(reelInfoOf(reelKey).defaultName || "")}">
+        <button class="btn ghost small" id="reelNameSave" type="button" hidden>Save name</button></label>
+      <span class="st-reel-desc">Description: <i id="reelDesc" data-shape="${esc(shape)}">${aboutLen(reelLength())} of the event's best moments, ${shape}.</i></span>
+      <span>${sale} <a href="${esc(watch)}" target="_blank">▶ Watch the finished version</a></span>`;
     $("reelStatus").innerHTML = `${pill(r, reelWait(reelKey))}
       <button class="btn approve small ${r.status === "approved" ? "is-on" : ""}" data-rstatus="approved" type="button">✓ Approve reel</button>
       <button class="btn edits small ${r.status === "edits" ? "is-on" : ""}" data-rstatus="edits" type="button">Needs edits</button>
@@ -520,12 +525,14 @@
   }
   function markReelDirty() {
     const changed = !same(rdraft, reelFromReview());
-    const target = reelTarget(reelKey), len = clock(reelLength()) + " long" + (target && Math.abs(reelLength() - target) > 0.5 ? ` (aim for ${clock(target)})` : "");
+    const len = clock(reelLength()) + " long";
+    const d = $("reelDesc"); if (d) d.textContent = `${aboutLen(reelLength())} of the event's best moments, ${d.dataset.shape}.`;
     $("reelDirty").innerHTML = changed ? `<span class="st-dirty">Unsaved changes</span> · ${len}` : len;
     $("reelSave").disabled = !changed;
   }
   function reelChanged() { renderTimeline(); markReelDirty(); }
 
+  $("tab-reel").addEventListener("keydown", (e) => { if (e.target.id === "reelName" && e.key === "Enter") $("reelNameSave").click(); });
   $("tab-reel").addEventListener("click", async (e) => {
     const t = e.target.closest("button"); if (!t) return;
     const p = rdraft.pieces[pieceIdx];
@@ -549,6 +556,10 @@
       if (t.dataset.reelkey === reelKey) return;
       if (!same(rdraft, reelFromReview()) && !confirm("This reel has unsaved changes. Switch reels anyway?")) return;
       stopReel(); reelKey = t.dataset.reelkey; rdraft = reelFromReview(); pieceIdx = rdraft.pieces.length ? 0 : -1; renderReel();
+    }
+    else if (t.id === "reelNameSave") {
+      const v = $("reelName").value.trim();
+      if (await save({ id: reelItemId(reelKey), name: v }, v ? `Renamed to “${v}”` : "Back to the default name")) renderReel();
     }
     else if (t.id === "reelAddon") {
       const on = !reelAddon(reelKey), list = addonList();
@@ -577,6 +588,7 @@
   });
   $("tab-reel").addEventListener("input", (e) => {
     const t = e.target, p = rdraft.pieces[pieceIdx];
+    if (t.id === "reelName") { $("reelNameSave").hidden = t.value.trim() === reelName(reelKey); return; }
     if (t.dataset.pt && p) setPieceTime(t.dataset.pt, Number(t.value));
     else if (t.dataset.rf) {
       const k = t.dataset.rf;

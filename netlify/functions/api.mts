@@ -5,7 +5,7 @@ import {
   fileStore, PART_SIZE, stripe, stripeKey, verifyStripeSignature, siteUrl,
   r2, r2Key, r2Presign, r2Head, r2Delete, storageMode, downloadName, zipName,
   r2List, r2MultipartStart, r2PartUrl, r2MultipartParts, r2MultipartComplete, r2MultipartAbort,
-  getReview, saveReview, clientCanSee, REVIEW_STATUSES, REEL_FORMATS, withReels,
+  getReview, saveReview, clientCanSee, REVIEW_STATUSES, REEL_FORMATS, withReels, reelList,
   editWaiting, reelWaiting, noteWaiting, getProject, saveProject, listProjects, PROJECT_STATUSES, getWorker, setWorker,
 } from "../../lib/core.mjs";
 
@@ -439,13 +439,10 @@ export default async (req: Request, context: Context) => {
         // the reel formats with, for this project's gallery, whether each reel is made and approved
         const g = p.gallerySlug ? getClient(p.gallerySlug) : null;
         const rv = g ? await getReview(g.slug) : null;
-        const reels = REEL_FORMATS.map((f: any) => {
-          const it = g?.items.find((i: any) => i.reel === f.id);
-          return { ...f, id: it?.id || `reel-${f.id}`, made: !!it, status: it ? rv?.items[it.id]?.status || "new" : null, addon: it ? rv?.items[it.id]?.addon || null : null };
-        });
-        if (g?.items.some((i: any) => i.id === "highlight-reel"))
-          reels.unshift({ id: "highlight-reel", group: "Your reel", label: "Your own reel", orientation: "portrait", made: true,
-            status: rv?.reel?.status || "new", addon: rv?.items["highlight-reel"]?.addon || null });
+        const reels = g ? reelList(g, rv).map((r: any) => ({
+          id: r.id, label: r.name, orientation: r.orientation, made: true, addon: r.addon,
+          group: r.orientation === "portrait" ? "Vertical reels" : "Horizontal reels",
+          status: (r.own ? rv?.reel?.status : rv?.items[r.id]?.status) || "new" })) : [];
         return json({ project: { ...summary, accessCode: p.accessCode || null }, reels, worker: await getWorker() });
       }
       if (route === "admin/project" && m === "POST") {
@@ -507,7 +504,7 @@ export default async (req: Request, context: Context) => {
               .map((f: any) => ({ key: f.key, name: f.key.split("/").pop(), size: f.size }))
           : [];
         return json({
-          client: publicClient(client), review, flags, worker: await getWorker(), music,
+          client: publicClient(client), review, flags, worker: await getWorker(), music, reels: reelList(client, review),
           project: project ? { id: project.id, name: project.name, addons: project.quote?.addons || [] } : null,
           items: client.items.map((i: any) => ({ ...i, ready: !!metas[i.id] })),
         });
@@ -531,6 +528,8 @@ export default async (req: Request, context: Context) => {
             r.status = b.status;
           }
           // Highlight reel add-on: the quote add-on (by name) it sells as; turning it on approves the reel
+          // the name the client sees for a reel (Keri's own words; blank = back to the default name)
+          if (b.name !== undefined && (item.reel || item.id === "highlight-reel")) r.name = str(b.name, 80) || null;
           if (b.addon !== undefined && (item.reel || item.id === "highlight-reel")) {
             r.addon = b.addon ? str(b.addon, 80) : null;
             if (r.addon) { if (item.reel) r.status = "approved"; else (review.reel ||= { status: "new", pieces: [], notes: [], version: 0 }).status = "approved"; }
