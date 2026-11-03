@@ -143,7 +143,8 @@ async function projectSummary(p: any, rawFolders: Set<string>) {
     counts = {
       items: items.length,
       approved: items.filter((i: any) => review.items[i.id]?.status === "approved").length,
-      waiting: items.filter((i: any) => editWaiting(review.items[i.id])).length + (reelWaiting(review.reel) ? 1 : 0),
+      waiting: items.filter((i: any) => editWaiting(review.items[i.id])).length + (reelWaiting(review.reel) ? 1 : 0)
+        + Object.values(review.reels || {}).filter((rp: any) => reelWaiting(rp)).length,
       notes: items.filter((i: any) => noteWaiting(review.items[i.id])).length + (noteWaiting(review.reel) ? 1 : 0),
     };
   } else if (p.sentToClaudeAt) status = "claude";
@@ -497,6 +498,7 @@ export default async (req: Request, context: Context) => {
         const flags: Record<string, any> = {};
         for (const i of client.items) flags[i.id] = { waiting: editWaiting(review.items[i.id]), note: noteWaiting(review.items[i.id]) };
         flags.reel = { waiting: reelWaiting(review.reel), note: noteWaiting(review.reel) };
+        for (const [rid, rp] of Object.entries(review.reels || {})) if (flags[rid]) flags[rid].waiting ||= reelWaiting(rp);
         const project = (await listProjects()).find((p: any) => p.gallerySlug === slug);
         return json({
           client: publicClient(client), review, flags, worker: await getWorker(), project: project ? { id: project.id, name: project.name } : null,
@@ -538,7 +540,20 @@ export default async (req: Request, context: Context) => {
           if (tool && b.rendered !== undefined) r.rendered = b.rendered === null ? null : { edit: cleanEdit(b.rendered, item), at };
           r.updatedAt = at;
         }
-        if (b.reel !== undefined || b.reelNote || b.reelStatus || b.reelRendered !== undefined) {
+        // A highlight reel add-on's plan (pieces, title, look...) lives in review.reels[<item id>]; its status and notes are
+        // the item's own (review.items[<item id>]), like any clip. review.reel is the older one-per-gallery reel.
+        if (b.reelId) {
+          const it = client.items.find((i: any) => i.id === b.reelId && i.reel);
+          if (!it) return bad("Unknown reel");
+          const rp = (review.reels ||= {})[b.reelId] ||= { pieces: [], version: 0 };
+          if (b.reel) {
+            Object.assign(rp, cleanReel(b.reel, client));
+            if (by === "Keri") (review.items[b.reelId] ||= { status: "new", edit: null, notes: [], version: 0 }).status = "edits";
+          }
+          if (Number.isInteger(b.reelVersion)) rp.version = b.reelVersion;
+          if (tool && b.reelRendered !== undefined) rp.rendered = b.reelRendered === null ? null : { plan: cleanReel(b.reelRendered, client), at };
+          rp.updatedAt = at;
+        } else if (b.reel !== undefined || b.reelNote || b.reelStatus || b.reelRendered !== undefined) {
           const reel = review.reel ||= { status: "new", pieces: [], notes: [], version: 0 };
           if (b.reel) Object.assign(reel, cleanReel(b.reel, client), { status: by === "Keri" ? "edits" : reel.status });
           const n = note(b.reelNote);

@@ -5,6 +5,7 @@
   studio.py render --slug river-oaks                 # render every changed request (items + reel)
   studio.py render --slug river-oaks --ids clip-03   # just these items
   studio.py render --slug river-oaks --reel [--music track.mp3]
+  studio.py render --slug river-oaks --ids reel-social-15      # a highlight reel add-on, from its plan
   studio.py set   --slug river-oaks --id clip-03 [--trim 0.8:3.0] [--speed 0.5] [--look warm]
   studio.py reply --slug river-oaks --id clip-03 --text "Trimmed the first second"   (--id reel for the reel)
   studio.py auto                                     # background job: every gallery, render + publish
@@ -380,12 +381,16 @@ def text_card(w, h, title, subtitle, y_frac):
     return im
 
 
-def render_reel(site, r2, data, cache, music=None):
-    reel, items = data["review"]["reel"], {i["id"]: i for i in data["items"]}
+def render_reel(site, r2, data, cache, music=None, reel_id=None):
+    """The gallery's own reel (review.reel), or with reel_id one of the highlight reel add-ons (review.reels[reel_id]),
+    rendered at its shape: vertical 1080x1920, horizontal 3840x2160."""
+    items = {i["id"]: i for i in data["items"]}
+    reel = data["review"]["reels"][reel_id] if reel_id else data["review"]["reel"]
     pieces = reel["pieces"]
     if not pieces:
         sys.exit("The reel has no pieces")
-    W, H = 1080, 1920
+    wide = bool(reel_id) and items[reel_id].get("orientation") == "landscape"
+    W, H = (3840, 2160) if wide else (1080, 1920)
     lens = [(p["out"] - p["in"]) / (p.get("speed") or 1) for p in pieces]
     fade = reel.get("transition", "fade") == "fade"
     total = sum(lens) - (XF * (len(pieces) - 1) if fade else 0)
@@ -416,15 +421,16 @@ def render_reel(site, r2, data, cache, music=None):
     with tempfile.TemporaryDirectory() as td:
         n = len(pieces)
         title_png, end_png = os.path.join(td, "title.png"), os.path.join(td, "end.png")
-        text_card(W, H, reel.get("title", ""), reel.get("subtitle", ""), 0.40).save(title_png)
+        text_card(W, H, reel.get("title", ""), reel.get("subtitle", ""), 0.36 if wide else 0.40).save(title_png)
         text_card(W, H, "", reel.get("endcard", ""), 0.46).save(end_png)
         inputs += ["-loop", "1", "-t", f"{total:.2f}", "-i", title_png, "-loop", "1", "-t", f"{total:.2f}", "-i", end_png]
-        chains.append(f"[{n}:v]format=rgba,fade=t=in:st=0:d=0.4:alpha=1,fade=t=out:st=3.6:d=0.6:alpha=1[t]")
+        hold = min(3.6, total * 0.4)  # short reels: the title is gone before half-way
+        chains.append(f"[{n}:v]format=rgba,fade=t=in:st=0:d=0.4:alpha=1,fade=t=out:st={hold:.2f}:d=0.6:alpha=1[t]")
         chains.append(f"[{n + 1}:v]format=rgba,fade=t=in:st={max(0, total - 3.2):.2f}:d=0.5:alpha=1[e]")
-        chains.append(f"[{last}][t]overlay=0:0:enable='lt(t,4.2)'[o1]")
+        chains.append(f"[{last}][t]overlay=0:0:enable='lt(t,{hold + 0.6:.2f})'[o1]")
         # the closing card is transparent when there's no closing text
         chains.append(f"[o1][e]overlay=0:0:enable='gte(t,{max(0, total - 3.2):.2f})',fade=t=out:st={total - 0.6:.2f}:d=0.6[vout]")
-        full = os.path.join(cache["_dir"], "highlight-reel.mp4")
+        full = os.path.join(cache["_dir"], f"{reel_id or 'highlight-reel'}.mp4")
         cmd = ["ffmpeg", "-y", *inputs]
         maps = ["-map", "[vout]"]
         if music:
@@ -435,8 +441,10 @@ def render_reel(site, r2, data, cache, music=None):
             log("   smoothing slow-motion pieces: this takes a few minutes")
         run(cmd + ["-filter_complex", ";".join(chains), *maps, "-c:v", "libx264", "-preset", "medium", "-crf", "17",
                    "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-t", f"{total:.2f}", full])
-        # watermarked preview for the gallery and studio
         media = os.path.join(ROOT, "public", "media", site.slug)
+        if reel_id:
+            return deliver_addon_reel(site, r2, reel_id, reel, full, media, td, W, H, total, n, music)
+        # watermarked preview for the gallery and studio
         prev = os.path.join(media, "reel-sample.mp4")
         wm = os.path.join(td, "wm.png")
         watermark_overlay(540, 960, center_y=0.72).save(wm)
@@ -460,6 +468,37 @@ def render_reel(site, r2, data, cache, music=None):
             msg += " No music yet: add a licensed track before it can be delivered."
         site.post({"reelStatus": "revised", "reelVersion": version, "reelRendered": reel, "reelNote": {"text": msg}})
         log(f"   done: preview v{version}, {os.path.getsize(full) / 1e6:.1f} MB full reel {'uploaded' if music else '(not uploaded: no music)'}")
+
+
+def deliver_addon_reel(site, r2, reel_id, reel, full, media, td, W, H, total, n, music):
+    """A re-rendered highlight reel add-on: new preview (cache-busted in the manifest), full file to R2, back to Keri."""
+    pw, ph = (960, 540) if W > H else (540, 960)
+    wm = os.path.join(td, "wm.png")
+    watermark_overlay(pw, ph).save(wm)
+    prev, poster = os.path.join(media, f"{reel_id}.mp4"), os.path.join(media, f"{reel_id}.jpg")
+    run(["ffmpeg", "-y", "-i", full, "-i", wm, "-filter_complex", f"[0:v]scale={pw}:{ph}[v];[v][1:v]overlay=0:0",
+         "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+         *(["-c:a", "aac", "-b:a", "96k"] if music else ["-an"]), prev])
+    run(["ffmpeg", "-y", "-ss", f"{min(total / 2, 5)}", "-i", prev, "-frames:v", "1", "-q:v", "4", poster])
+    version = (reel.get("version") or 1) + 1
+    mpath = manifest_path(site.slug)
+    man = json.load(open(mpath))
+    for it in man["items"]:
+        if it["id"] == reel_id:
+            it.update(duration=round(total, 2), version=version, preview=f"/media/{site.slug}/{reel_id}.mp4?v={version}",
+                      poster=f"/media/{site.slug}/{reel_id}.jpg?v={version}")
+    json.dump(man, open(mpath, "w"), indent=2)
+    r2.put(f"full/{site.slug}/{reel_id}", full, "video/mp4")
+    site.call("POST", "/api/admin/upload-done", {"id": reel_id, "name": f"{site.slug}-{reel_id}.mp4", "type": "video/mp4"})
+    site.post({"reelId": reel_id, "reelVersion": version, "reelRendered": reel})
+    site.post({"id": reel_id, "status": "revised", "note": {"text": f"Updated the reel: {n} pieces, {total:.0f} seconds."
+               + ("" if music else " No music yet: it's silent until a licensed track is added.") + " Take a look and approve it."}})
+    log(f"   {reel_id}: v{version}, {total:.1f}s, {os.path.getsize(full) / 1e6:.0f} MB")
+
+
+def addon_reels_changed(data):
+    """Highlight reel add-ons whose saved plan differs from the last rendered one."""
+    return [rid for rid, rp in (data["review"].get("reels") or {}).items() if reel_changed(rp)]
 
 
 # ---------------- commands ----------------
@@ -544,10 +583,10 @@ def cmd_auto():
         for slug in slugs:
             site = Site(slug, by="Auto-editor")
             data = site.review()
-            ids, do_reel = pending(data), reel_changed(data["review"].get("reel"))
-            if not ids and not do_reel:
+            ids, do_reel, reels = pending(data), reel_changed(data["review"].get("reel")), addon_reels_changed(data)
+            if not ids and not do_reel and not reels:
                 continue
-            log(f"{slug}: {len(ids)} item(s){' + reel' if do_reel else ''}")
+            log(f"{slug}: {len(ids)} item(s){' + reel' if do_reel else ''}{f' + {len(reels)} add-on reel(s)' if reels else ''}")
             with tempfile.TemporaryDirectory() as td:
                 cache = {"_dir": td}
                 r2 = R2()
@@ -555,7 +594,9 @@ def cmd_auto():
                     render_items(site, r2, data, ids, cache)
                 if do_reel:
                     render_reel(site, r2, site.review(), cache)
-            rendered += [f"{slug}/{i}" for i in ids] + ([f"{slug}/reel"] if do_reel else [])
+                for rid in reels:
+                    render_reel(site, r2, site.review(), cache, reel_id=rid)
+            rendered += [f"{slug}/{i}" for i in ids] + ([f"{slug}/reel"] if do_reel else []) + [f"{slug}/{r}" for r in reels]
         if rendered:
             for cmd in (["npm", "run", "build"], ["netlify", "deploy", "--prod", "--build"]):
                 p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
@@ -635,9 +676,13 @@ def main():
         return log(f"{a.id}: edit set to {edit}")
     # render
     # default: every changed item request, plus the reel if its plan changed. --ids limits it to those items.
-    ids = [x for x in a.ids.split(",") if x] or pending(data)
+    # highlight reel add-ons (reel-<format>) render from their plan; --ids may name them too
+    plans = data["review"].get("reels") or {}
+    asked = [x for x in a.ids.split(",") if x]
+    reels = [x for x in asked if x in plans] if asked else addon_reels_changed(data)
+    ids = [x for x in asked if x not in plans] if asked else pending(data)
     do_reel = a.reel or (not a.ids and reel_changed(data["review"].get("reel")))
-    if not ids and not do_reel:
+    if not ids and not do_reel and not reels:
         return log("Nothing to render: no edit requests have changed.")
     with tempfile.TemporaryDirectory() as td:
         cache = {"_dir": td}
@@ -646,6 +691,8 @@ def main():
             render_items(site, r2, data, ids, cache)
         if do_reel:
             render_reel(site, r2, site.review(), cache, a.music)
+        for rid in reels:
+            render_reel(site, r2, site.review(), cache, a.music, reel_id=rid)
     log("Next: npm run build, deploy, and commit the changed previews/manifest.")
 
 

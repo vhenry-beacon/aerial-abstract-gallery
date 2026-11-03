@@ -55,9 +55,11 @@
     if (!r.ok) { toast(r.body.error || "Couldn't load the gallery"); return; }
     D = r.body;
     $("previewLink").href = `/g/${encodeURIComponent(slug)}`;
-    // the old one-reel arranger only for galleries that still have that reel
-    document.querySelector('#stTabs [data-tab="reel"]').classList.toggle("hidden", !D.items.some((i) => i.id === "highlight-reel"));
-    if (tab === "reel" && !D.items.some((i) => i.id === "highlight-reel")) setTab("items");
+    // the Highlight reels tab: the gallery's own reel (if it has one) and the highlight reel add-ons
+    const anyReel = reelKeys().length > 0;
+    document.querySelector('#stTabs [data-tab="reel"]').classList.toggle("hidden", !anyReel);
+    if (tab === "reel" && !anyReel) setTab("items");
+    if (!reelKeys().includes(reelKey)) { reelKey = reelKeys()[0] || "legacy"; rdraft = null; }
     renderPublish();
     renderItems();
     if (!rdraft) rdraft = reelFromReview();
@@ -91,7 +93,8 @@
   // Where Keri's requests stand: queued for the auto-editor, notes for Claude, updates to check.
   function renderBanner() {
     const items = D.items.filter((i) => !i.upsellOnly);
-    const queued = items.filter((i) => editWaiting(D.review.items[i.id])).length + (reelWaiting(D.review.reel) ? 1 : 0);
+    const queued = items.filter((i) => editWaiting(D.review.items[i.id])).length + (reelWaiting(D.review.reel) ? 1 : 0)
+      + Object.values(D.review.reels || {}).filter((rp) => reelWaiting(rp)).length;
     const notes = items.filter((i) => noteWaiting(D.review.items[i.id]) && rev(i.id).status !== "approved").length + (noteWaiting(D.review.reel) ? 1 : 0);
     const updated = items.filter((i) => rev(i.id).status === "revised").length + (D.review.reel?.status === "revised" ? 1 : 0);
     const w = D.worker, stale = !w || Date.now() - new Date(w.at) > 40 * 60000;
@@ -162,8 +165,7 @@
   };
 
   function renderItems() {
-    // highlight reels (items with `reel`) are reviewed here too, after the photos and clips
-    const items = [...D.items.filter((i) => !i.upsellOnly), ...D.items.filter((i) => i.reel)];
+    const items = D.items.filter((i) => !i.upsellOnly);
     const counts = { all: items.length };
     for (const s of Object.keys(STATUS)) counts[s] = items.filter((i) => rev(i.id).status === s).length;
     counts.queued = items.filter((i) => editWaiting(rev(i.id))).length;
@@ -191,14 +193,7 @@
       return `<h3 class="st-sec">${title} · ${xs.length}</h3>` + gs.map((g) =>
         `${gs.length > 1 ? `<div class="st-subsec">${g.label} · ${g.items.length}</div>` : ""}${g.items.map(thumb).join("")}`).join("");
     };
-    const reels = list.filter((i) => i.reel);
-    const reelPart = reels.length ? `<h3 class="st-sec">Highlight reels · ${reels.length}</h3>` +
-      [["landscape", "Website &amp; YouTube (horizontal)"], ["portrait", "Social media (vertical)"]].map(([o, label]) => {
-        const xs = reels.filter((i) => i.orientation === o);
-        return xs.length ? `<div class="st-subsec">${label} · ${xs.length}</div>${xs.map(thumb).join("")}` : "";
-      }).join("") + `<p class="st-small st-muted st-reel-tip">Approve a reel and give it a price on the project page to offer it to the client.</p>` : "";
-    const plain = list.filter((i) => !i.reel);
-    $("grid").innerHTML = part("Videos", plain.filter((i) => i.type === "video")) + part("Pictures", plain.filter((i) => i.type !== "video")) + reelPart
+    $("grid").innerHTML = part("Videos", list.filter((i) => i.type === "video")) + part("Pictures", list.filter((i) => i.type !== "video"))
       || `<p class="empty">Nothing here.</p>`;
   }
   $("filters").addEventListener("click", async (e) => {
@@ -399,8 +394,20 @@
   const clips = () => D.items.filter((i) => i.type === "video" && !i.upsellOnly);
   const clipById = (id) => clips().find((c) => c.id === id);
   const blankReel = () => ({ pieces: [], look: null, title: D.client.eventName, subtitle: D.client.clientName, endcard: "", transition: "fade", music: "" });
+  // Several reels: "legacy" = the gallery's own reel (review.reel), or a highlight reel add-on's item id
+  // (its plan in review.reels[id]; its status and notes are the item's, like any clip).
+  const REEL_ORDER = ["web-30", "web-60", "web-90", "social-7", "social-15", "social-30", "social-60"];
+  const addonReels = () => D.items.filter((i) => i.reel).sort((a, b) => REEL_ORDER.indexOf(a.reel) - REEL_ORDER.indexOf(b.reel));
+  const reelKeys = () => [...(D.items.some((i) => i.id === "highlight-reel") ? ["legacy"] : []), ...addonReels().map((i) => i.id)];
+  const planOf = (k) => (k === "legacy" ? D.review.reel : D.review.reels?.[k]);
+  const reelRev = (k) => (k === "legacy" ? D.review.reel || { status: "new", notes: [] } : rev(k));
+  const reelWait = (k) => reelWaiting(planOf(k)) || (k !== "legacy" && editWaiting(D.review.items[k]));
+  const reelName = (k) => (k === "legacy" ? "Your reel" : item(k).title.replace(/^.* reel · /, ""));
+  const reelTarget = (k) => (k === "legacy" ? null : item(k).duration && REEL_SECONDS[item(k).reel]);
+  const REEL_SECONDS = { "web-30": 30, "web-60": 60, "web-90": 90, "social-7": 7, "social-15": 15, "social-30": 30, "social-60": 60 };
+  let reelKey = "legacy";
   function reelFromReview() {
-    const r = D.review.reel;
+    const r = planOf(reelKey);
     if (!r) return blankReel();
     const { pieces, look, title, subtitle, endcard, transition, music } = r;
     return clone({ pieces, look, title, subtitle, endcard, transition, music });
@@ -411,12 +418,30 @@
     return rdraft.pieces.reduce((a, p) => a + pieceLen(p), 0) - (rdraft.transition === "fade" ? Math.max(0, n - 1) * XF : 0);
   }
 
+  function renderReelPick() {
+    const chip = (k) => { const r = reelRev(k);
+      return `<button class="st-chip ${k === reelKey ? "on" : ""}" data-reelkey="${esc(k)}" type="button">${esc(reelName(k))}${r.status === "approved" ? " ✓" : reelWait(k) ? " ⏳" : ""}</button>`; };
+    const group = (label, ks) => (ks.length ? `<div class="st-reel-grp"><span>${label}</span>${ks.map(chip).join("")}</div>` : "");
+    const ks = reelKeys(), adds = addonReels();
+    $("reelPick").innerHTML = group("", ks.filter((k) => k === "legacy"))
+      + group("Website &amp; YouTube", adds.filter((i) => i.orientation === "landscape").map((i) => i.id))
+      + group("Social media", adds.filter((i) => i.orientation !== "landscape").map((i) => i.id));
+  }
   function renderReel() {
     if (!D) return;
-    const r = D.review.reel || { status: "new", notes: [] };
-    $("reelStatus").innerHTML = `${pill(r, reelWaiting(D.review.reel))}
+    if (!rdraft) rdraft = reelFromReview();
+    renderReelPick();
+    const r = reelRev(reelKey), it = reelKey === "legacy" ? null : item(reelKey);
+    $("reelFrame").classList.toggle("wide", it?.orientation === "landscape");
+    const watch = it ? it.preview : `/media/${encodeURIComponent(slug)}/reel-sample.mp4`;
+    $("reelInfo").innerHTML = it
+      ? `<b>${esc(it.title)}</b> · ${it.orientation === "landscape" ? "horizontal" : "vertical"} · aim for ${clock(reelTarget(reelKey))}.
+         Approve it and give it a price on the project page to offer it to the client. <a href="${esc(watch)}" target="_blank">▶ Watch the finished version</a>`
+      : `<b>Your reel</b> · vertical. <a href="${esc(watch)}" target="_blank">▶ Watch the finished version</a>`;
+    $("reelStatus").innerHTML = `${pill(r, reelWait(reelKey))}
       <button class="btn approve small ${r.status === "approved" ? "is-on" : ""}" data-rstatus="approved" type="button">✓ Approve reel</button>
-      <button class="btn edits small ${r.status === "edits" ? "is-on" : ""}" data-rstatus="edits" type="button">Needs edits</button>`;
+      <button class="btn edits small ${r.status === "edits" ? "is-on" : ""}" data-rstatus="edits" type="button">Needs edits</button>
+      ${it ? `<button class="btn remove small ${r.status === "remove" ? "is-on" : ""}" data-rstatus="remove" type="button">Don't offer</button>` : ""}`;
     renderTimeline(); renderPiece(); renderReelForm(); renderReelNotes(); markReelDirty();
     $("clipPick").innerHTML = clips().map((c) => `<button data-addclip="${esc(c.id)}" type="button"><img src="${esc(c.poster)}" alt="">${esc(c.title)} · ${secs(c.duration)}</button>`).join("");
     showReelFrame(0);
@@ -460,7 +485,7 @@
       <span>Music</span><input class="field" data-rf="music" value="${esc(rdraft.music)}" placeholder="Song you have a license for, or the mood you want">`;
   }
   function renderReelNotes() {
-    const notes = D.review.reel?.notes || [];
+    const notes = reelRev(reelKey).notes || [];
     $("reelNotes").innerHTML = `<div class="st-notes">${notes.map((n, k) => `<div class="st-note ${n.by !== "Keri" ? "claude" : ""}">
         <div class="who"><span>${esc(n.by)} · ${new Date(n.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
         ${n.by === "Keri" ? `<button class="del" data-rdelnote="${k}" type="button">Delete</button>` : ""}</div>
@@ -471,7 +496,8 @@
   }
   function markReelDirty() {
     const changed = !same(rdraft, reelFromReview());
-    $("reelDirty").innerHTML = changed ? `<span class="st-dirty">Unsaved changes</span> · ${clock(reelLength())} long` : `${clock(reelLength())} long`;
+    const target = reelTarget(reelKey), len = clock(reelLength()) + " long" + (target && Math.abs(reelLength() - target) > 0.5 ? ` (aim for ${clock(target)})` : "");
+    $("reelDirty").innerHTML = changed ? `<span class="st-dirty">Unsaved changes</span> · ${len}` : len;
     $("reelSave").disabled = !changed;
   }
   function reelChanged() { renderTimeline(); markReelDirty(); }
@@ -495,14 +521,27 @@
     else if (t.dataset.ptnow && p) setPieceTime(t.dataset.ptnow, curV().currentTime);
     else if (t.dataset.pspeed && p) { p.speed = Number(t.dataset.pspeed); reelChanged(); renderPiece(); }
     else if (t.dataset.plook !== undefined && p) { p.look = t.dataset.plook ? { preset: t.dataset.plook } : null; reelChanged(); renderPiece(); showReelFrame(pieceIdx); }
-    else if (t.dataset.rstatus) { if (await save({ reelStatus: t.dataset.rstatus }, "Reel status saved")) renderReel(); }
-    else if (t.dataset.rdelnote) { if (confirm("Delete this note?") && (await save({ reelDeleteNote: Number(t.dataset.rdelnote) }))) renderReelNotes(); }
+    else if (t.dataset.reelkey) {
+      if (t.dataset.reelkey === reelKey) return;
+      if (!same(rdraft, reelFromReview()) && !confirm("This reel has unsaved changes. Switch reels anyway?")) return;
+      stopReel(); reelKey = t.dataset.reelkey; rdraft = reelFromReview(); pieceIdx = rdraft.pieces.length ? 0 : -1; renderReel();
+    }
+    else if (t.dataset.rstatus) {
+      const body = reelKey === "legacy" ? { reelStatus: t.dataset.rstatus } : { id: reelKey, status: t.dataset.rstatus };
+      if (await save(body, "Reel status saved")) renderReel();
+    }
+    else if (t.dataset.rdelnote) {
+      const body = reelKey === "legacy" ? { reelDeleteNote: Number(t.dataset.rdelnote) } : { id: reelKey, deleteNote: Number(t.dataset.rdelnote) };
+      if (confirm("Delete this note?") && (await save(body))) renderReelNotes();
+    }
     else if (t.id === "reelAddNote") {
       const text = $("reelNoteText").value.trim(); if (!text) return $("reelNoteText").focus();
-      if (await save({ reelNote: { text, t: $("reelNoteAt").checked ? seq.reelTime : null } }, "Note saved")) renderReel();
+      const n = { text, t: $("reelNoteAt").checked ? seq.reelTime : null };
+      if (await save(reelKey === "legacy" ? { reelNote: n } : { id: reelKey, note: n }, "Note saved")) renderReel();
     }
     else if (t.id === "reelSave") {
-      if (await save({ reel: rdraft }, "Reel saved. Claude will render the new version.")) { rdraft = reelFromReview(); renderReel(); }
+      const body = reelKey === "legacy" ? { reel: rdraft } : { reelId: reelKey, reel: rdraft };
+      if (await save(body, "Reel saved. The new version is made within 15 minutes.")) { rdraft = reelFromReview(); renderReel(); }
     }
     else if (t.id === "reelPlay") seq.playing ? stopReel() : playReel(0, false);
   });

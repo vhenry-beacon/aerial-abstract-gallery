@@ -12,8 +12,9 @@ Each reel takes evenly spaced moments from its story (always the first and the l
 Vertical reels are 1080x1920 (the size social apps use), horizontal ones 3840x2160; shots of the other shape are
 scaled to fill and center-cropped. Sources are the clips' delivered full-quality files (R2 full/<slug>/<id>).
 
-Each reel becomes a gallery item reel-<format> (upsellOnly, `reel: <format>`), arrives in the studio as not
-reviewed, and is offered to the client only once Keri approves it and prices it on the project page.
+Each reel becomes a gallery item reel-<format> (upsellOnly, `reel: <format>`) with its plan saved for the studio's
+Highlight reel tab (review.reels[reel-<format>], where Keri can change shots, title and look; studio.py re-renders it),
+arrives in the studio as not reviewed, and is offered to the client only once Keri approves it and prices it on the project page.
 Without --music the reels are silent; the note on each one says so.
 Written Nov 2, 2026.
 """
@@ -46,18 +47,35 @@ def pick(story, n):
     return [story[round(k * (len(story) - 1) / (n - 1))] for k in range(n)]
 
 
-def build(fmt, plan, items, sources, out, music=None):
+def plan_pieces(fmt, plan, items):
+    """The reel's shots as studio reel pieces: [{clip, in, out, speed, look}] adding up to exactly its length."""
     group, label, T, shape = FORMATS[fmt]
-    W, H = (1080, 1920) if shape == "portrait" else (3840, 2160)
     n = 3 if T <= 8 else max(4, round(T / SHOT))
     moments = pick(plan["stories"][shape], n)
     n = len(moments)
     L = (T + XF * (n - 1)) / n  # crossfades eat XF per join; this makes the total exactly T
+    out = []
+    for cid, start in moments:
+        s = max(0.0, min(float(start), items[cid]["duration"] - L - 0.05))
+        out.append({"clip": cid, "in": round(s, 2), "out": round(s + L, 2), "speed": 1, "look": None})
+    return out
+
+
+def studio_plan(fmt, plan, items):
+    """What the studio's Highlight reel tab edits (review.reels[reel-<format>])."""
+    return {"pieces": plan_pieces(fmt, plan, items), "look": None, "title": plan.get("title", ""),
+            "subtitle": plan.get("subtitle", ""), "endcard": "", "transition": "fade", "music": ""}
+
+
+def build(fmt, plan, items, sources, out, music=None):
+    group, label, T, shape = FORMATS[fmt]
+    W, H = (1080, 1920) if shape == "portrait" else (3840, 2160)
+    pieces = plan_pieces(fmt, plan, items)
+    n = len(pieces)
+    L = pieces[0]["out"] - pieces[0]["in"]
     inputs, chains = [], []
-    for k, (cid, start) in enumerate(moments):
-        dur = items[cid]["duration"]
-        s = max(0.0, min(float(start), dur - L - 0.05))
-        inputs += ["-ss", f"{s:.3f}", "-t", f"{L:.3f}", "-i", sources[cid]]
+    for k, p in enumerate(pieces):
+        inputs += ["-ss", f"{p['in']:.3f}", "-t", f"{L:.3f}", "-i", sources[p["clip"]]]
         chains.append(f"[{k}:v]scale={W}:{H}:force_original_aspect_ratio=increase:flags=lanczos,crop={W}:{H},setsar=1,"
                       f"fps=30,format=yuv420p,setpts=PTS-STARTPTS[v{k}]")
     last, off = "v0", L
@@ -80,7 +98,7 @@ def build(fmt, plan, items, sources, out, music=None):
             maps += ["-map", "[aout]", "-c:a", "aac", "-b:a", "192k"]
         run(cmd + ["-filter_complex", ";".join(chains), *maps, "-c:v", "libx264", "-preset", "medium", "-crf", "18",
                    "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-t", f"{T:.2f}", out])
-    return {"W": W, "H": H, "shots": n, "moments": [m[0] for m in moments]}
+    return {"W": W, "H": H, "shots": n, "moments": [p["clip"] for p in pieces]}
 
 
 def main():
@@ -144,6 +162,8 @@ def main():
                     + (", with music." if a.music else ". No music yet: it's silent until a licensed track is added (tell Claude which one).")
                     + " Approve it and set its price on the project page to offer it to the client.")
             site.post({"id": rid, "status": "new", "note": {"text": note}})
+            sp = studio_plan(rid[len("reel-"):], plan, items)  # Keri can now rearrange it in the Highlight reel tab
+            site.post({"reelId": rid, "reel": sp, "reelRendered": sp, "reelVersion": items[rid]["version"]})
     subprocess.run(["git", "add", "clients", "public/media", "lib/registry.generated.mjs"], cwd=ROOT)
     subprocess.run(["git", "commit", "-q", "-m", f"{a.slug}: highlight reels {', '.join(r for r, *_ in made)}"], cwd=ROOT)
     log("done")
