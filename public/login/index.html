@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Studio Sign-in · Aerial Abstract</title>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&family=Instrument+Serif&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <!-- Keri's sign-in for the studio, projects and orders (Nov 3, 2026). Clients never come here: they use their
+       private gallery link and access code. Same admin password as before; it signs you in for 14 days. -->
+  <main class="wrap login">
+    <form id="loginForm">
+      <div class="brand">Aerial Abstract</div>
+      <h1>Studio sign-in</h1>
+      <p>For Keri: projects, the review studio and orders.</p>
+      <!-- lets the browser's password manager remember the sign-in -->
+      <input type="text" name="username" autocomplete="username" value="Aerial Abstract studio" hidden readonly>
+      <input class="field" id="pw" name="password" type="password" placeholder="Password" autocomplete="current-password" required autofocus>
+      <div class="err" id="loginErr" role="alert"></div>
+      <button class="btn" id="go" style="width:100%">Sign in</button>
+      <p style="font-size:13px;margin-top:18px">Looking for your photos? Use the private link in your email.</p>
+    </form>
+  </main>
+  <script>
+    (async () => {
+      // where to go after signing in: the page that sent you here (only studio pages), else Projects
+      const want = new URLSearchParams(location.search).get("next") || "";
+      const next = /^\/admin(\/|$)/.test(want) ? want : "/admin/";
+      // already signed in? go straight there
+      const r = await fetch("/api/admin/clients", { credentials: "same-origin" }).catch(() => null);
+      if (r && r.ok) return location.replace(next);
+      const $ = (id) => document.getElementById(id);
+      $("loginForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        $("go").disabled = true; $("loginErr").textContent = "";
+        const res = await fetch("/api/admin/login", { method: "POST", credentials: "same-origin",
+          headers: { "content-type": "application/json" }, body: JSON.stringify({ password: $("pw").value }) }).catch(() => null);
+        if (res && res.ok) return location.replace(next);
+        $("go").disabled = false;
+        $("loginErr").textContent = res && res.status === 401 ? "That password didn't match. Try again." : "Couldn't reach the site. Check your connection and try again.";
+        $("pw").select();
+      });
+    })();
+  </script>
+</body>
+</html>
