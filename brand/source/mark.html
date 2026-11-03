@@ -1,0 +1,39 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:Script;src:url(fonts/Sacramento-Regular.ttf)}
+@font-face{font-family:Cond;src:url(fonts/Oswald.ttf)}
+html,body{margin:0;background:transparent}
+svg{display:block}
+</style></head><body><script>
+// one page draws every piece; ?v=<variant> picks which (rendered by Chrome headless)
+const v=new URLSearchParams(location.search).get("v");
+const NAVY="#0F2133", GOLD="#C9A24E", GOLD_DK="#9A7430", IVORY="#F4EDE0";
+const grad=(id,a,b,c)=>`<linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset=".5" stop-color="${b}"/><stop offset="1" stop-color="${c}"/></linearGradient>`;
+const defs=`<defs>${grad("g","#E6C77E","#C9A24E","#8F6A28")}${grad("gd","#B8913F","#9A7430","#6F521E")}</defs>`;
+function badge(S,bg,fill,sub){ // her round mark: gold ring, stacked script, BY KERI HENRY
+  const c=S/2, r=S*0.44;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${S}" height="${S}" viewBox="0 0 ${S} ${S}">${defs}
+   ${bg?`<rect width="${S}" height="${S}" fill="${bg}"/>`:""}
+   <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="url(#${fill})" stroke-width="${S*0.022}"/>
+   <circle cx="${c}" cy="${c}" r="${r-S*0.03}" fill="none" stroke="url(#${fill})" stroke-width="${S*0.004}" opacity=".7"/>
+   <text x="${c}" y="${S*0.455}" text-anchor="middle" font-family="Script" font-size="${S*0.215}" fill="url(#${fill})">Aerial</text>
+   <text x="${c}" y="${S*0.655}" text-anchor="middle" font-family="Script" font-size="${S*0.215}" fill="url(#${fill})">Abstract</text>
+   ${sub?`<text x="${c}" y="${S*0.77}" text-anchor="middle" font-family="Cond" font-weight="400" font-size="${S*0.052}" letter-spacing="${S*0.012}" fill="${sub}">BY KERI HENRY</text>`:""}
+  </svg>`;
+}
+function wide(W,H,bg,fill,sub){ // one-line wordmark for Stripe's "Logo"
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${defs}
+   ${bg?`<rect width="${W}" height="${H}" fill="${bg}"/>`:""}
+   <text x="${W/2}" y="${H*0.6}" text-anchor="middle" font-family="Script" font-size="${H*0.43}" fill="url(#${fill})">Aerial Abstract</text>
+   <text x="${W/2}" y="${H*0.84}" text-anchor="middle" font-family="Cond" font-size="${H*0.085}" letter-spacing="${H*0.028}" fill="${sub}">BY KERI HENRY</text>
+  </svg>`;
+}
+const out={
+  "icon":        ()=>badge(1024,NAVY,"g",IVORY),
+  "badge-dark":  ()=>badge(1024,null,"g",IVORY),
+  "badge-light": ()=>badge(1024,null,"gd",NAVY),
+  "logo-dark":   ()=>wide(1600,500,null,"g",IVORY),
+  "logo-light":  ()=>wide(1600,500,null,"gd",NAVY),
+  "logo-navy":   ()=>wide(1600,500,NAVY,"g",IVORY),
+}[v];
+document.fonts.load("10px Script").then(()=>document.fonts.load("10px Cond")).then(()=>{document.body.innerHTML=out();document.title="ready"});
+</script></body></html>
