@@ -269,7 +269,7 @@ export default async (req: Request, context: Context) => {
     // (public/zip-sw.js builds the zip in the browser, so nothing large runs on the server).
     // With ?ids=a,b and Keri signed in: those files, bought or not (the studio's "Download full quality").
     if (route === "download-list" && m === "GET") {
-      const client = getClient(url.searchParams.get("slug"));
+      const client = await liveClient(url.searchParams.get("slug"));
       if (!client) return bad("Gallery not found", 404);
       if (!(await isClientAuthed(req, client.slug))) return bad("Please sign in", 401);
       const ids = url.searchParams.get("ids");

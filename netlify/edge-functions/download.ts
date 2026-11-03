@@ -1,7 +1,7 @@
 // Streams a full-resolution file to the client, only if it has been purchased
 // (or the requester is signed in as admin). Files are stored as 4 MB chunks in Blobs.
 import type { Config, Context } from "@netlify/edge-functions";
-import { getClient, getState, isClientAuthed, isAdmin, fileStore, r2, r2Key, r2Presign, downloadName } from "../../lib/core.mjs";
+import { getClient, getState, getReview, withReels, isClientAuthed, isAdmin, fileStore, r2, r2Key, r2Presign, downloadName } from "../../lib/core.mjs";
 
 export default async (req: Request, context: Context) => {
   const { slug, id } = context.params as { slug: string; id: string };
@@ -18,7 +18,9 @@ export default async (req: Request, context: Context) => {
   const store = fileStore();
   const meta: any = await store.get(`meta/${slug}/${id}`, { type: "json" });
   if (!meta) return new Response("This file is still being prepared. Check back soon.", { status: 404 });
-  const item = client.items.find((i: any) => i.id === id) || { id };
+  // reels download under the name Keri gave them in the studio
+  const named = client.items.some((i: any) => i.upsellOnly && i.id === id) ? withReels(client, await getReview(slug)) : client;
+  const item = named.items.find((i: any) => i.id === id) || { id };
   const name = downloadName(client, item, meta.filename);
   const disposition = `attachment; filename="${name.replace(/[^\x20-\x7e]/g, "_").replace(/"/g, "")}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 
