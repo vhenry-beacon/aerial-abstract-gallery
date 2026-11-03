@@ -10,8 +10,10 @@
       "height": 2160,
       "source": "drone and Osmo footage",
       "fullFile": "mashup-01.mp4",
-      "preview": "/media/river-oaks/mashup-01.mp4",
-      "poster": "/media/river-oaks/mashup-01.jpg"
+      "preview": "/media/river-oaks/mashup-01.mp4?v=1",
+      "poster": "/media/river-oaks/mashup-01.jpg?v=1",
+      "origPreview": "/media/river-oaks/mashup-01.orig.mp4",
+      "origPoster": "/media/river-oaks/mashup-01.orig.jpg"
     },
     {
       "id": "mashup-02",
@@ -23,8 +25,10 @@
       "height": 3840,
       "source": "drone and Osmo footage",
       "fullFile": "mashup-02.mp4",
-      "preview": "/media/river-oaks/mashup-02.mp4",
-      "poster": "/media/river-oaks/mashup-02.jpg"
+      "preview": "/media/river-oaks/mashup-02.mp4?v=1",
+      "poster": "/media/river-oaks/mashup-02.jpg?v=1",
+      "origPreview": "/media/river-oaks/mashup-02.orig.mp4",
+      "origPoster": "/media/river-oaks/mashup-02.orig.jpg"
     },
     {
       "id": "clip-01",
@@ -499,8 +503,10 @@
         275
       ],
       "fullFile": "wide-01.mp4",
-      "preview": "/media/river-oaks/wide-01.mp4",
-      "poster": "/media/river-oaks/wide-01.jpg"
+      "preview": "/media/river-oaks/wide-01.mp4?v=1",
+      "poster": "/media/river-oaks/wide-01.jpg?v=1",
+      "origPreview": "/media/river-oaks/wide-01.orig.mp4",
+      "origPoster": "/media/river-oaks/wide-01.orig.jpg"
     },
     {
       "id": "wide-02",
@@ -562,8 +568,10 @@
         480
       ],
       "fullFile": "wide-04.mp4",
-      "preview": "/media/river-oaks/wide-04.mp4",
-      "poster": "/media/river-oaks/wide-04.jpg"
+      "preview": "/media/river-oaks/wide-04.mp4?v=1",
+      "poster": "/media/river-oaks/wide-04.jpg?v=1",
+      "origPreview": "/media/river-oaks/wide-04.orig.mp4",
+      "origPoster": "/media/river-oaks/wide-04.orig.jpg"
     },
     {
       "id": "wide-05",
