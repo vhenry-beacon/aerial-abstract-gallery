@@ -518,9 +518,21 @@
       // made on the Mac for this reel first (Stable Audio, newest first)
       ...(D.made || []).filter((t) => t.reelId === reelItemId(reelKey)).reverse()
         .map((t) => ({ value: `file:${t.key}`, title: t.title, mood: "Made for this reel", url: t.url, group: "Made for this reel" })),
-      ...(D.library || []).map((t) => ({ value: `file:${t.key}`, title: t.title, mood: t.mood, goodFor: t.goodFor, url: t.url, group: "Aerial Abstract music · royalty-free" })),
+      ...catalogFor(reelLength()).map((t) => ({ value: `file:${t.key}`, title: `${t.title} · ${t.version}`, mood: `${t.seconds} s · ${t.mood}`,
+        goodFor: t.goodFor, url: t.url, group: "Music catalog · made for Aerial Abstract" })),
       ...(D.music || []).map((m) => ({ value: `file:${m.key}`, title: m.name, mood: "Your uploaded music", url: m.url, group: "Your music" })),
     ];
+  }
+  // The catalog (lib/music-library.json, tools/build_music_catalog.py) has each scenario at several lengths: offer the
+  // shortest one at least as long as the reel (so it ends close to the reel's end), or the longest for very long reels.
+  function catalogFor(len) {
+    const by = {};
+    for (const t of D.library || []) (by[t.scenario || t.id] ||= []).push(t);
+    return Object.values(by).flatMap((ts) => {
+      const lens = [...new Set(ts.map((t) => t.seconds))].sort((a, b) => a - b);
+      const fit = lens.find((L) => L >= len - 1) ?? lens.at(-1);
+      return ts.filter((t) => t.seconds === fit);
+    });
   }
   const soundTitle = (v) => soundChoices().find((c) => c.value === v)?.title;
   function musicOptions() {
@@ -528,7 +540,9 @@
     const opt = (c) => `<option value="${esc(c.value)}" ${c.value === v ? "selected" : ""}>${esc(c.title)}${c.mood && c.group ? ` · ${esc(c.mood)}` : ""}</option>`;
     let html = cs.filter((c) => !c.group).map(opt).join("");
     for (const g of [...new Set(cs.filter((c) => c.group).map((c) => c.group))]) html += `<optgroup label="${esc(g)}">${cs.filter((c) => c.group === g).map(opt).join("")}</optgroup>`;
-    if (v && !cs.some((c) => c.value === v)) html += `<option value="${esc(v)}" selected>${v.startsWith("file:") ? `${esc(v.split("/").pop())} (file not found)` : `“${esc(v)}” (a note only, no sound yet: pick a choice above)`}</option>`;
+    const known = [...(D.library || []), ...(D.made || [])].find((t) => `file:${t.key}` === v);
+    if (v && !cs.some((c) => c.value === v)) html += `<option value="${esc(v)}" selected>${known ? `${esc(known.title)}${known.version ? ` · ${known.version}` : ""}${known.seconds ? ` (${known.seconds} s)` : ""}`
+      : v.startsWith("file:") ? `${esc(v.split("/").pop())} (file not found)` : `“${esc(v)}” (a note only, no sound yet: pick a choice above)`}</option>`;
     return html;
   }
   // "Make music for this reel": the editing Mac writes new music with Stable Audio at the reel's length
@@ -579,7 +593,7 @@
     $("reelDirty").innerHTML = changed ? `<span class="st-dirty">Unsaved changes</span> · ${len}` : len;
     $("reelSave").disabled = !changed;
   }
-  function reelChanged() { renderTimeline(); markReelDirty(); }
+  function reelChanged() { renderTimeline(); markReelDirty(); renderTrySounds(); }
 
   $("tab-reel").addEventListener("keydown", (e) => { if (e.target.id === "reelName" && e.key === "Enter") $("reelNameSave").click(); });
   $("tab-reel").addEventListener("click", async (e) => {
