@@ -498,14 +498,12 @@ def render_reel(site, r2, data, cache, music=None, reel_id=None):
                 u["preview"], u["poster"] = ver_url(u["preview"], version), ver_url(u["poster"], version)
         json.dump(client, open(cpath, "w"), indent=2)
         msg = f"Updated the reel: {n} pieces, {total:.0f} seconds."
-        if sound:
-            r2.put(f"full/{site.slug}/highlight-reel", full, "video/mp4")
-            site.call("POST", "/api/admin/upload-done", {"id": "highlight-reel", "name": f"{site.slug}-highlight-reel.mp4", "type": "video/mp4"})
-            msg += (" Music added" if music else " With the clips' own sound") + "; the full-quality reel is ready for the client."
-        else:
-            msg += " No sound yet: pick music or the clips' own sound under Sound."
+        # always delivered now: Keri can sell her own reel as an add-on (Nov 3, 2026), with or without sound
+        r2.put(f"full/{site.slug}/highlight-reel", full, "video/mp4")
+        site.call("POST", "/api/admin/upload-done", {"id": "highlight-reel", "name": f"{site.slug}-highlight-reel.mp4", "type": "video/mp4"})
+        msg += (" Music added." if music else " With the clips' own sound." if clip_sound else " No sound yet: pick music or the clips' own sound under Sound.")
         site.post({"reelStatus": "revised", "reelVersion": version, "reelRendered": reel, "reelNote": {"text": msg}})
-        log(f"   done: preview v{version}, {os.path.getsize(full) / 1e6:.1f} MB full reel {'uploaded' if sound else '(not uploaded: no sound)'}")
+        log(f"   done: preview v{version}, {os.path.getsize(full) / 1e6:.1f} MB full reel uploaded")
 
 
 def deliver_addon_reel(site, r2, reel_id, reel, full, media, td, W, H, total, n, sound):

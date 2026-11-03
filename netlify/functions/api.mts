@@ -15,10 +15,10 @@ const CLAUDE_STATES = ["waiting", "working", "ready", "problem"];
 // (prices come from the project page, so changing one needs no deploy).
 async function liveClient(slug: any) {
   const client = getClient(slug);
-  if (!client || !client.items.some((i: any) => i.reel)) return client;
+  if (!client || !client.items.some((i: any) => i.reel || i.id === "highlight-reel")) return client;
   const [review, projects] = await Promise.all([getReview(client.slug), listProjects()]);
   const project = projects.find((p: any) => p.gallerySlug === client.slug);
-  return withReels(client, review, project?.quote?.reelPrices || {});
+  return withReels(client, review, project?.quote?.addons || []);
 }
 const bad = (msg: string, status = 400) => json({ error: msg }, { status });
 
@@ -123,8 +123,6 @@ function cleanProject(b: any, prev: any = {}) {
       addons: (Array.isArray(q.addons) ? q.addons : []).slice(0, 10)
         .map((a: any) => ({ name: str(a.name, 80), price: cents(a.price), description: str(a.description, 400) }))
         .filter((a: any) => a.name),
-      // highlight reel prices in cents; a missing or 0 price means that reel isn't offered
-      reelPrices: Object.fromEntries(REEL_FORMATS.map((f: any) => [f.id, cents(q.reelPrices?.[f.id])]).filter(([, v]: any) => v > 0)),
     },
     instructions: str(b.instructions, 8000),
   };
@@ -443,8 +441,11 @@ export default async (req: Request, context: Context) => {
         const rv = g ? await getReview(g.slug) : null;
         const reels = REEL_FORMATS.map((f: any) => {
           const it = g?.items.find((i: any) => i.reel === f.id);
-          return { ...f, made: !!it, status: it ? rv?.items[it.id]?.status || "new" : null };
+          return { ...f, id: it?.id || `reel-${f.id}`, made: !!it, status: it ? rv?.items[it.id]?.status || "new" : null, addon: it ? rv?.items[it.id]?.addon || null : null };
         });
+        if (g?.items.some((i: any) => i.id === "highlight-reel"))
+          reels.unshift({ id: "highlight-reel", group: "Your reel", label: "Your own reel", orientation: "portrait", made: true,
+            status: rv?.reel?.status || "new", addon: rv?.items["highlight-reel"]?.addon || null });
         return json({ project: { ...summary, accessCode: p.accessCode || null }, reels, worker: await getWorker() });
       }
       if (route === "admin/project" && m === "POST") {
@@ -506,7 +507,8 @@ export default async (req: Request, context: Context) => {
               .map((f: any) => ({ key: f.key, name: f.key.split("/").pop(), size: f.size }))
           : [];
         return json({
-          client: publicClient(client), review, flags, worker: await getWorker(), project: project ? { id: project.id, name: project.name } : null, music,
+          client: publicClient(client), review, flags, worker: await getWorker(), music,
+          project: project ? { id: project.id, name: project.name, addons: project.quote?.addons || [] } : null,
           items: client.items.map((i: any) => ({ ...i, ready: !!metas[i.id] })),
         });
       }
@@ -527,6 +529,11 @@ export default async (req: Request, context: Context) => {
           if (b.status !== undefined) {
             if (!REVIEW_STATUSES.includes(b.status)) return bad("Unknown status");
             r.status = b.status;
+          }
+          // Highlight reel add-on: the quote add-on (by name) it sells as; turning it on approves the reel
+          if (b.addon !== undefined && (item.reel || item.id === "highlight-reel")) {
+            r.addon = b.addon ? str(b.addon, 80) : null;
+            if (r.addon) { if (item.reel) r.status = "approved"; else (review.reel ||= { status: "new", pieces: [], notes: [], version: 0 }).status = "approved"; }
           }
           // Complimentary: a free extra outside the package's included picks; it's for the client, so it's approved too
           if (typeof b.comp === "boolean" && !item.upsellOnly) {

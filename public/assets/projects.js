@@ -120,31 +120,28 @@
     renderAddons(P.quote?.addons || []);
     renderReelPrices();
   }
-  // Highlight reel add-ons: one price per format (blank = not offered), next to where the reel stands
+  // Highlight reels: which add-on (from the Add-ons list above) each reel sells as, and where it stands.
+  // Keri turns a reel into an add-on in the review studio's Highlight reels tab; this list just shows it.
   let REELS = [];
-  const REEL_STATE = { null: "Not made yet", new: "Ready for your review", edits: "Edits requested", revised: "Updated, check it", approved: "Approved", remove: "Removed" };
-  function reelStatus(f) {
-    const offered = f.status === "approved" && P.quote?.reelPrices?.[f.id] > 0;
-    return offered ? "✅ Offered to the client" : REEL_STATE[f.status];
+  const REEL_STATE = { null: "Not made yet", new: "Ready for your review", edits: "Edits requested", revised: "Updated, check it", approved: "Approved", remove: "Not offered" };
+  function reelLine(f) {
+    const a = f.addon && addonsFromForm().find((x) => x.name === f.addon);
+    if (f.addon && !a) return `⚠️ Add-on “${esc(f.addon)}” isn't in the list above`;
+    if (a && !(a.price > 0)) return `⚠️ “${esc(a.name)}” has no price`;
+    if (a && f.status === "approved") return `✅ Offered as “${esc(a.name)}” · $${(a.price / 100).toLocaleString()}`;
+    if (a) return `Add-on “${esc(a.name)}” · ${REEL_STATE[f.status]}`;
+    return `Not an add-on · ${REEL_STATE[f.status]}`;
   }
   function renderReelPrices() {
     let group = "";
     $("reelPrices").innerHTML = REELS.map((f) => {
       const head = f.group !== group ? `<div class="pj-reel-group">${esc(f.group)} <span class="st-muted">· ${f.orientation === "portrait" ? "vertical" : "horizontal"}</span></div>` : "";
       group = f.group;
-      const v = P.quote?.reelPrices?.[f.id];
-      return `${head}<div class="pj-reel"><span>${esc(f.label)}</span>
-        <input class="field" type="number" min="0" step="1" placeholder="$" data-reel="${esc(f.id)}" value="${v ? v / 100 : ""}" aria-label="${esc(f.group)} ${esc(f.label)} price">
-        <span class="st-small st-muted" data-reelstate="${esc(f.id)}">${reelStatus(f)}</span></div>`;
+      return `${head}<div class="pj-reel"><span>${esc(f.label)}</span><span class="st-small" data-reelstate="${esc(f.id)}">${reelLine(f)}</span></div>`;
     }).join("") || `<p class="st-muted st-small">Reels can be added once the gallery is built.</p>`;
   }
   function renderReelStatus() {
-    for (const f of REELS) { const el = document.querySelector(`[data-reelstate="${f.id}"]`); if (el) el.textContent = reelStatus(f); }
-  }
-  function reelPricesFromForm() {
-    const out = {};
-    for (const el of document.querySelectorAll("[data-reel]")) { const c = Math.round(Number(el.value || 0) * 100); if (c > 0) out[el.dataset.reel] = c; }
-    return out;
+    for (const f of REELS) { const el = document.querySelector(`[data-reelstate="${f.id}"]`); if (el) el.innerHTML = reelLine(f); }
   }
   function renderAddons(list) {
     $("addons").innerHTML = list.map((a, k) => `<div class="pj-addon" data-addon="${k}">
@@ -167,7 +164,6 @@
       set(d, el.dataset.k, v);
     }
     set(d, "quote.addons", addonsFromForm().filter((a) => a.name));
-    set(d, "quote.reelPrices", reelPricesFromForm());
     return d;
   }
   function markDirty() {
@@ -183,7 +179,7 @@
     return true;
   }
   if (!isHome) {
-    document.addEventListener("input", (e) => { if (e.target.closest("[data-k], .pj-addon, [data-reel]")) markDirty(); });
+    document.addEventListener("input", (e) => { if (e.target.closest("[data-k], .pj-addon")) { markDirty(); if (e.target.closest(".pj-addon")) renderReelStatus(); } });
     $("addAddon").onclick = () => { renderAddons([...addonsFromForm(), { name: "", price: 0, description: "" }]); markDirty(); };
     $("addons").addEventListener("click", (e) => {
       const b = e.target.closest("[data-delAddon]"); if (!b) return;

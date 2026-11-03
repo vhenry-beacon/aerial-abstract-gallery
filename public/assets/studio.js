@@ -404,6 +404,10 @@
   const planOf = (k) => (k === "legacy" ? D.review.reel : D.review.reels?.[k]);
   const reelRev = (k) => (k === "legacy" ? D.review.reel || { status: "new", notes: [] } : rev(k));
   const reelWait = (k) => reelWaiting(planOf(k)) || (k !== "legacy" && editWaiting(D.review.items[k]));
+  const reelItemId = (k) => (k === "legacy" ? "highlight-reel" : k);
+  const reelAddon = (k) => D.review.items[reelItemId(k)]?.addon || null;  // the quote add-on it sells as
+  const addonList = () => (D.project?.addons || []).filter((a) => a.name);
+  const money = (c) => `$${(c / 100).toLocaleString()}`;
   const reelName = (k) => (k === "legacy" ? "Your reel" : item(k).title.replace(/^.* reel · /, ""));
   const reelTarget = (k) => (k === "legacy" ? null : item(k).duration && REEL_SECONDS[item(k).reel]);
   const REEL_SECONDS = { "web-30": 30, "web-60": 60, "web-90": 90, "social-7": 7, "social-15": 15, "social-30": 30, "social-60": 60 };
@@ -422,7 +426,7 @@
 
   function renderReelPick() {
     const chip = (k) => { const r = reelRev(k);
-      return `<button class="st-chip ${k === reelKey ? "on" : ""}" data-reelkey="${esc(k)}" type="button">${esc(reelName(k))}${r.status === "approved" ? " ✓" : reelWait(k) ? " ⏳" : ""}</button>`; };
+      return `<button class="st-chip ${k === reelKey ? "on" : ""}" data-reelkey="${esc(k)}" type="button">${esc(reelName(k))}${reelAddon(k) ? " 💲" : ""}${r.status === "approved" ? " ✓" : reelWait(k) ? " ⏳" : ""}</button>`; };
     const group = (label, ks) => (ks.length ? `<div class="st-reel-grp"><span>${label}</span>${ks.map(chip).join("")}</div>` : "");
     const ks = reelKeys(), adds = addonReels();
     $("reelPick").innerHTML = group("", ks.filter((k) => k === "legacy"))
@@ -436,14 +440,22 @@
     const r = reelRev(reelKey), it = reelKey === "legacy" ? null : item(reelKey);
     $("reelFrame").classList.toggle("wide", it?.orientation === "landscape");
     const watch = it ? it.preview : `/media/${encodeURIComponent(slug)}/reel-sample.mp4`;
-    $("reelInfo").innerHTML = it
-      ? `<b>${esc(it.title)}</b> · ${it.orientation === "landscape" ? "horizontal" : "vertical"} · aim for ${clock(reelTarget(reelKey))}.
-         Approve it and give it a price on the project page to offer it to the client. <a href="${esc(watch)}" target="_blank">▶ Watch the finished version</a>`
-      : `<b>Your reel</b> · vertical. <a href="${esc(watch)}" target="_blank">▶ Watch the finished version</a>`;
+    const ad = reelAddon(reelKey), adObj = ad && addonList().find((a) => a.name === ad);
+    const sale = !ad ? "Turn on <b>💲 Add-on</b> to sell it to the client."
+      : !adObj ? `⚠️ The add-on “${esc(ad)}” isn't on the project page any more: pick another one.`
+      : !(adObj.price > 0) ? `⚠️ “${esc(ad)}” has no price on the project page yet.`
+      : r.status === "approved" ? `✅ Offered to the client as an add-on at ${money(adObj.price)}.`
+      : `Add-on at ${money(adObj.price)} once you approve it.`;
+    $("reelInfo").innerHTML = (it
+      ? `<b>${esc(it.title)}</b> · ${it.orientation === "landscape" ? "horizontal" : "vertical"} · aim for ${clock(reelTarget(reelKey))}. `
+      : `<b>Your reel</b> · vertical. `) + `${sale} <a href="${esc(watch)}" target="_blank">▶ Watch the finished version</a>`;
     $("reelStatus").innerHTML = `${pill(r, reelWait(reelKey))}
       <button class="btn approve small ${r.status === "approved" ? "is-on" : ""}" data-rstatus="approved" type="button">✓ Approve reel</button>
       <button class="btn edits small ${r.status === "edits" ? "is-on" : ""}" data-rstatus="edits" type="button">Needs edits</button>
-      ${it ? `<button class="btn remove small ${r.status === "remove" ? "is-on" : ""}" data-rstatus="remove" type="button">Don't offer</button>` : ""}`;
+      ${it ? `<button class="btn remove small ${r.status === "remove" ? "is-on" : ""}" data-rstatus="remove" type="button">Don't offer</button>` : ""}
+      <button class="btn comp small ${ad ? "is-on" : ""}" id="reelAddon" type="button" title="Sell this reel to the client as an add-on, at the price of the add-on you pick">💲 Add-on</button>
+      ${ad && addonList().length > 1 ? `<select class="field st-addon-pick" id="reelAddonPick" aria-label="Sell as">${addonList().map((a) =>
+        `<option value="${esc(a.name)}" ${a.name === ad ? "selected" : ""}>${esc(a.name)} · ${money(a.price)}</option>`).join("")}</select>` : ""}`;
     renderTimeline(); renderPiece(); renderReelForm(); renderReelNotes(); markReelDirty();
     $("clipPick").innerHTML = clips().map((c) => `<button data-addclip="${esc(c.id)}" type="button"><img src="${esc(c.poster)}" alt="">${esc(c.title)} · ${secs(c.duration)}</button>`).join("");
     showReelFrame(0);
@@ -538,6 +550,12 @@
       if (!same(rdraft, reelFromReview()) && !confirm("This reel has unsaved changes. Switch reels anyway?")) return;
       stopReel(); reelKey = t.dataset.reelkey; rdraft = reelFromReview(); pieceIdx = rdraft.pieces.length ? 0 : -1; renderReel();
     }
+    else if (t.id === "reelAddon") {
+      const on = !reelAddon(reelKey), list = addonList();
+      if (on && !list.length) return alert("First add a highlight reel add-on with its price under Add-ons on the project page.");
+      const pick = on ? (list.find((a) => /reel/i.test(a.name)) || list[0]).name : null;
+      if (await save({ id: reelItemId(reelKey), addon: pick }, on ? `Add-on: offered to the client as “${pick}”` : "No longer an add-on")) renderReel();
+    }
     else if (t.dataset.rstatus) {
       const body = reelKey === "legacy" ? { reelStatus: t.dataset.rstatus } : { id: reelKey, status: t.dataset.rstatus };
       if (await save(body, "Reel status saved")) renderReel();
@@ -568,8 +586,9 @@
       markReelDirty(); if (k === "transition") renderTimeline();
     }
   });
-  $("tab-reel").addEventListener("change", (e) => {
+  $("tab-reel").addEventListener("change", async (e) => {
     const t = e.target, p = rdraft.pieces[pieceIdx];
+    if (t.id === "reelAddonPick") { if (await save({ id: reelItemId(reelKey), addon: t.value }, `Now sold as “${t.value}”`)) renderReel(); return; }
     if (t.dataset.pf === "clip" && p) {
       const c = clipById(t.value);
       p.clip = c.id; p.in = 0; p.out = Math.round(Math.min(c.duration, Math.max(1, p.out - p.in)) * 100) / 100;
