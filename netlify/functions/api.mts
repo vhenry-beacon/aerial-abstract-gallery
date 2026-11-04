@@ -269,9 +269,11 @@ export default async (req: Request, context: Context) => {
     // (public/zip-sw.js builds the zip in the browser, so nothing large runs on the server).
     // With ?ids=a,b and Keri signed in: those files, bought or not (the studio's "Download full quality").
     if (route === "download-list" && m === "GET") {
-      const client = await liveClient(url.searchParams.get("slug"));
-      if (!client) return bad("Gallery not found", 404);
-      if (!(await isClientAuthed(req, client.slug))) return bad("Please sign in", 401);
+      // file names use the gallery's own event name (as single downloads do) and each reel's studio name
+      const base = getClient(url.searchParams.get("slug"));
+      if (!base) return bad("Gallery not found", 404);
+      if (!(await isClientAuthed(req, base.slug))) return bad("Please sign in", 401);
+      const client = withReels(base, await getReview(base.slug));
       const ids = url.searchParams.get("ids");
       if (ids && !(await isAdmin(req))) return bad("Please sign in to the studio", 401);
       const want = ids ? new Set(ids.split(",")) : null;
