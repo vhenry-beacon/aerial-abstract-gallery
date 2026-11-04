@@ -63,7 +63,10 @@
     }).join("");
 
     $("orders").innerHTML = `<tr><th>Date</th><th>Status</th><th>Lines</th><th>Total</th><th>Paid via</th><th>Email</th></tr>` +
-      (st.orders.length ? st.orders.map((o) => `<tr><td>${new Date(o.createdAt).toLocaleString()}</td><td><span class="pill ${o.status === "paid" ? "ok" : ""}">${o.status}</span></td>
+      (st.orders.length ? st.orders.map((o) => `<tr><td>${new Date(o.createdAt).toLocaleString()}</td><td><span class="pill ${o.status === "paid" ? "ok" : o.status === "invoiced" ? "warn" : ""}">${o.status === "invoiced" ? "invoice sent, unpaid" : o.status}</span>
+        ${o.invoice ? `<br><a href="${o.invoice.url}" target="_blank">Invoice ${o.invoice.number || ""}</a> · <a href="${o.invoice.pdf}" target="_blank">PDF</a><br>${o.invoice.org || ""}${o.invoice.po ? ` · PO ${o.invoice.po}` : ""}` : ""}
+        ${o.status === "invoiced" && st.invoice?.orderId === o.id ? `<br><button class="btn small" data-action="invoice-paid" type="button">Mark paid and release files</button>
+          <button class="btn ghost small" data-action="invoice-void" type="button">Cancel invoice</button>` : ""}</td>
         <td>${(o.lines || []).map((l) => `${l.name}${l.qty > 1 ? " × " + l.qty : ""}`).join("<br>") || "Included picks"}</td><td>${money(o.amountPaid ?? o.total)}</td><td>${o.paidVia || ""}</td><td>${o.customerEmail || ""}</td></tr>`).join("")
         : `<tr><td colspan="6" style="color:var(--ink-3)">No orders yet</td></tr>`);
   }

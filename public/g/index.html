@@ -94,6 +94,31 @@
       <button class="btn" id="payBtn" type="button">Pay securely</button>
     </div>
     <p style="font-size:12px;color:var(--ink-3);margin:12px 0 0">Card payments are processed by Stripe. Full-quality files unlock here as soon as payment goes through.</p>
+    <!-- for organizations that need approval before paying: a Stripe invoice to download, approve and pay later -->
+    <div class="inv-opt hidden" id="invOpt">
+      <button class="linkish" id="invShow" type="button">Need an invoice to get this approved first?</button>
+      <div class="hidden" id="invForm">
+        <p class="inv-help">We'll make an invoice listing everything you picked. Download it, get it approved, then pay online with the link on the invoice, by card or bank transfer. Your files unlock here as soon as it's paid.</p>
+        <input class="field" id="invOrg" maxlength="120" placeholder="Organization name (who the invoice is for)" autocomplete="organization">
+        <input class="field" id="invEmail" type="email" maxlength="200" placeholder="Email for the invoice (e.g. accounts payable)">
+        <input class="field" id="invPo" maxlength="60" placeholder="PO number (optional)">
+        <div class="err" id="invErr"></div>
+        <button class="btn ghost" id="invMake" type="button" style="width:100%">Create invoice</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- an invoice waiting for payment -->
+  <aside class="drawer" id="invDrawer" aria-modal="true" role="dialog">
+    <h3>Your invoice</h3>
+    <div id="invBody"></div>
+    <div class="err" id="invDrawerErr"></div>
+    <div class="row" style="flex-wrap:wrap">
+      <a class="btn ghost" id="invPdf" target="_blank" rel="noopener">Download invoice (PDF)</a>
+      <a class="btn" id="invPay" target="_blank" rel="noopener">Pay online</a>
+    </div>
+    <p style="font-size:13px;color:var(--ink-3);margin:14px 0 0">Your picks are locked while the invoice is open. <button class="linkish" id="invCancel" type="button">Cancel the invoice to change them</button></p>
+    <button class="btn ghost" id="invClose" type="button" style="width:100%;margin-top:14px">Keep browsing</button>
   </aside>
 
   <aside class="drawer" id="how" role="dialog">

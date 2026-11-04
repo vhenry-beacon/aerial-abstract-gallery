@@ -8,6 +8,7 @@ import {
   r2List, r2MultipartStart, r2PartUrl, r2MultipartParts, r2MultipartComplete, r2MultipartAbort,
   getReview, saveReview, clientCanSee, REVIEW_STATUSES, REEL_FORMATS, withReels, reelList,
   editWaiting, reelWaiting, noteWaiting, getProject, saveProject, listProjects, PROJECT_STATUSES, getWorker, setWorker,
+  invoiceLines,
 } from "../../lib/core.mjs";
 
 const CLAUDE_STATES = ["waiting", "working", "ready", "problem"];
@@ -50,9 +51,43 @@ async function fileMetas(slug: string) {
   return out;
 }
 
+// ---- invoices (Nov 3, 2026) ----
+// A client whose organization needs approval asks for an invoice instead of paying by card. It's a real Stripe
+// invoice (PDF with a "Pay online" link; card or bank transfer). Their picks are locked into the order, and paying
+// unlocks the files like a card checkout (webhook invoice.paid, or this check on the next visit). A check by mail:
+// Keri presses "Mark paid and release files", which also marks the invoice paid in Stripe.
+const invoiceInfo = (o: any) => ({ orderId: o.id, total: o.total, createdAt: o.createdAt, ...o.invoice });
+// The open invoice's order, after asking Stripe whether it has been paid or cancelled meanwhile.
+async function syncInvoice(client: any, state: any) {
+  if (!state.invoice) return null;
+  const order = await getOrder(client.slug, state.invoice);
+  if (!order || order.status !== "invoiced") {
+    state.invoice = null; await saveState(client, state);
+    return null;
+  }
+  if (stripeKey() && order.invoice?.id) {
+    try {
+      const inv = await stripe("GET", `invoices/${order.invoice.id}`);
+      if (inv.status === "paid") { order.amountPaid = inv.amount_paid; await fulfillOrder(client, order, "invoice"); return null; }
+      if (inv.status === "void") return await dropInvoice(client, order);
+    } catch (e) { console.error("invoice check", e); }
+  }
+  return order;
+}
+async function dropInvoice(client: any, order: any) {
+  order.status = "void"; order.voidedAt = new Date().toISOString();
+  await saveOrder(order);
+  const state = await getState(client);
+  if (state.invoice === order.id) { state.invoice = null; await saveState(client, state); }
+  return null;
+}
+const LOCKED = "Your invoice is waiting for payment, so your picks are locked. To change them, cancel the invoice first.";
+
 // `admin` = Keri previewing: she sees exactly what the client will see once the gallery is published.
 async function galleryPayload(client: any, admin = false) {
-  const state = await getState(client);
+  let state = await getState(client);
+  const open = await syncInvoice(client, state);
+  if (state.invoice && !open) state = await getState(client);
   const metas = await fileMetas(client.slug);
   const review = await getReview(client.slug);
   const asPublished = admin ? { ...review, published: true } : review;
@@ -66,6 +101,7 @@ async function galleryPayload(client: any, admin = false) {
     })),
     state: { packagePaid: state.packagePaid, selected: state.selected, cartUpsells: state.cartUpsells, purchased: state.purchased },
     quote: quote(client, state, asPublished),
+    invoice: open ? invoiceInfo(open) : null,
     paymentsEnabled: !!stripeKey(),
     ...(admin ? { adminPreview: { published: review.published, hidden: client.items.length - visible.length } } : {}),
   };
@@ -207,6 +243,7 @@ export default async (req: Request, context: Context) => {
       if (!client) return bad("Gallery not found", 404);
       if (!(await isClientAuthed(req, slug))) return bad("Please sign in", 401);
       const state = await getState(client);
+      if (await syncInvoice(client, state)) return bad(LOCKED, 409);
       if (upsell) {
         if (!(client.upsells || []).some((u: any) => u.id === upsell)) return bad("Unknown add-on");
         state.cartUpsells = state.cartUpsells.filter((x: string) => x !== upsell);
@@ -232,6 +269,7 @@ export default async (req: Request, context: Context) => {
       if (!client) return bad("Gallery not found", 404);
       if (!(await isClientAuthed(req, slug))) return bad("Please sign in", 401);
       const state = await getState(client);
+      if (await syncInvoice(client, state)) return bad("Your invoice is waiting for payment. Use its Pay online link, or cancel it to pay by card here.", 409);
       const q = quote(client, state, await getReview(slug));
       if (!q.cart.length && !q.comp.length && !q.upsells.length && !q.packageIncluded) return bad("Your cart is empty");
       const order: any = {
@@ -263,6 +301,72 @@ export default async (req: Request, context: Context) => {
       order.stripeSessionId = session.id;
       await saveOrder(order);
       return json({ url: session.url });
+    }
+
+    // "Get an invoice": the cart as a Stripe invoice to approve and pay later.
+    if (route === "invoice" && m === "POST") {
+      const { slug, org, email, po } = await readJson(req);
+      const client = await liveClient(slug);
+      if (!client) return bad("Gallery not found", 404);
+      if (!(await isClientAuthed(req, slug))) return bad("Please sign in", 401);
+      if (!stripeKey()) return bad("Invoices aren't switched on yet. Your picks are saved. Keri will follow up.", 503);
+      let state = await getState(client);
+      if (await syncInvoice(client, state)) return bad("There's already an invoice waiting for payment. Cancel it first to make a new one.", 409);
+      state = await getState(client);
+      const q = quote(client, state, await getReview(slug));
+      if (!q.total) return bad("There's nothing to pay for, so no invoice is needed.");
+      const name = str(org, 120), mail = str(email, 200), poNum = str(po, 60);
+      if (!name) return bad("Please enter the organization's name for the invoice.");
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail)) return bad("Please enter the email address the invoice should go to.");
+      const order: any = {
+        id: crypto.randomUUID(), slug, createdAt: new Date().toISOString(), status: "invoiced",
+        lines: q.lines, total: q.total, assign: q.assign, comp: q.comp, upsells: q.upsells, unlocks: q.unlocks, packageIncluded: q.packageIncluded,
+      };
+      // due on the project's payment date when that's at least a week away, otherwise in 14 days
+      const project = (await listProjects()).find((p: any) => p.gallerySlug === slug);
+      const dueProject = Date.parse(`${project?.quote?.due || ""}T23:59:00-06:00`);
+      const due = Math.floor((dueProject > Date.now() + 7 * 864e5 ? dueProject : Date.now() + 14 * 864e5) / 1000);
+      const when = client.eventDate ? new Date(`${client.eventDate}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
+      const p = client.provider || {};
+      // the same billing email reuses its Stripe customer, so its invoices stay together in Stripe
+      const known = (await stripe("GET", `customers?limit=10&email=${encodeURIComponent(mail)}`)).data
+        .find((c: any) => c.metadata?.slug === slug && c.name === name);
+      const customer = known || (await stripe("POST", "customers", { name, email: mail, metadata: { slug } }));
+      const inv = await stripe("POST", "invoices", {
+        customer: customer.id, collection_method: "send_invoice", due_date: due, pending_invoice_items_behavior: "exclude",
+        description: `Photos and videos from ${client.eventName}${when ? ` (${when})` : ""}, chosen in your private gallery. `
+          + `Pay online with the link on this invoice (card or bank transfer). To pay by check, contact ${p.person || "us"}${p.email ? ` at ${p.email}` : ""}. `
+          + `The full-quality files are released in the gallery as soon as payment is received.`,
+        custom_fields: { 0: { name: "Event", value: `${client.eventName}${when ? `, ${when}` : ""}`.slice(0, 140) },
+          ...(poNum ? { 1: { name: "PO number", value: poNum } } : {}) },
+        footer: `${p.person || ""}${p.phone ? ` · ${p.phone}` : ""}${p.email ? ` · ${p.email}` : ""}`.replace(/^ · /, "") || undefined,
+        metadata: { slug, orderId: order.id },
+      });
+      // one line per pick, so the approver sees exactly what's included (Stripe lists them in this order)
+      for (const l of invoiceLines(client, q)) {
+        await stripe("POST", "invoiceitems", { customer: customer.id, invoice: inv.id, currency: "usd", amount: l.amount, description: l.description.slice(0, 250) });
+      }
+      const fin = await stripe("POST", `invoices/${inv.id}/finalize`, { auto_advance: true });
+      if (fin.amount_due !== q.total) console.error("invoice total mismatch", fin.amount_due, q.total);
+      order.invoice = { id: fin.id, number: fin.number, url: fin.hosted_invoice_url, pdf: fin.invoice_pdf, due: fin.due_date, org: name, email: mail, po: poNum || null };
+      order.customerEmail = mail;
+      await saveOrder(order);
+      state.invoice = order.id;
+      await saveState(client, state);
+      try { await stripe("POST", `invoices/${fin.id}/send`); } catch (e) { console.error("invoice email", e); }
+      return json(await galleryPayload(client, await isAdmin(req)));
+    }
+    if (route === "invoice-cancel" && m === "POST") {
+      const { slug } = await readJson(req);
+      const client = await liveClient(slug);
+      if (!client) return bad("Gallery not found", 404);
+      if (!(await isClientAuthed(req, slug))) return bad("Please sign in", 401);
+      const order = await syncInvoice(client, await getState(client));
+      if (order) {
+        await stripe("POST", `invoices/${order.invoice.id}/void`);
+        await dropInvoice(client, order);
+      }
+      return json(await galleryPayload(client, await isAdmin(req)));
     }
 
     // Every purchased, ready file with its friendly name, size and a 6-hour link: feeds the "Download all" zip
@@ -324,6 +428,15 @@ export default async (req: Request, context: Context) => {
           order.amountPaid = s.amount_total;
           order.customerEmail = s.customer_details?.email;
           await fulfillOrder(client, order, "stripe");
+        }
+      }
+      if (evt.type === "invoice.paid") {
+        const inv = evt.data.object;
+        const client = await liveClient(inv.metadata?.slug);
+        const order = client && (await getOrder(client.slug, inv.metadata?.orderId));
+        if (client && order && order.invoice?.id === inv.id) {
+          order.amountPaid = inv.amount_paid;
+          await fulfillOrder(client, order, order.paidVia === "check" ? "check" : "invoice");
         }
       }
       return json({ received: true });
@@ -523,6 +636,7 @@ export default async (req: Request, context: Context) => {
         const library = r2() ? await Promise.all((MUSIC_LIBRARY as any[]).map(async (t: any) => ({ ...t, url: await r2Presign("GET", t.key, 6 * 3600) }))) : [];
         return json({
           client: publicClient(client), review, flags, worker: await getWorker(), music, library, made, reels: reelList(client, review),
+          invoice: await (async () => { const o = await syncInvoice(client, await getState(client)); return o ? invoiceInfo(o) : null; })(),
           project: project ? { id: project.id, name: project.name, addons: project.quote?.addons || [] } : null,
           items: client.items.map((i: any) => ({ ...i, ready: !!metas[i.id] })),
         });
@@ -668,10 +782,27 @@ export default async (req: Request, context: Context) => {
         const { action, id } = await readJson(req);
         const state = await getState(client);
         const at = new Date().toISOString();
+        if (action === "invoice-paid" || action === "invoice-void") {
+          // the client's open invoice: paid by check (released now, and marked paid in Stripe) or cancelled
+          const live = await liveClient(slug);
+          const order = await syncInvoice(live, state);
+          if (!order) return bad("There's no invoice waiting for payment (it may have just been paid online).", 409);
+          if (action === "invoice-void") {
+            await stripe("POST", `invoices/${order.invoice.id}/void`);
+            await dropInvoice(live, order);
+          } else {
+            try { await stripe("POST", `invoices/${order.invoice.id}/pay`, { paid_out_of_band: true }); }
+            catch (e) { console.error("mark invoice paid in Stripe", e); }
+            order.amountPaid = order.total;
+            await fulfillOrder(live, order, "check");
+          }
+          return json({ ok: true });
+        }
         if (action === "mark-package-paid") state.packagePaid = true;
         else if (action === "mark-package-unpaid") state.packagePaid = false;
         else if (action === "unlock" && id) state.purchased[id] = { kind: "comp", orderId: "admin", at };
         else if (action === "revoke" && id) delete state.purchased[id];
+        else if (action === "mark-cart-paid" && state.invoice) return bad("This client has an invoice waiting. Use Mark paid and release files on the invoice instead.", 409);
         else if (action === "mark-cart-paid") {
           // Client paid outside the site (PayPal, check): fulfill the current cart as a manual order.
           const live = await liveClient(slug);

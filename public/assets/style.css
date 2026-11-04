@@ -153,3 +153,12 @@ button { font: inherit; cursor: pointer; }
 .empty { color: var(--ink-3); padding: 30px 0; }
 footer { color: var(--ink-3); font-size: 13px; padding: 30px 0 40px; border-top: 1px solid var(--line); margin-top: 10px; }
 .hidden { display: none !important; }
+
+/* invoices (Nov 3, 2026): "Need an invoice?" in the order drawer, and the open-invoice drawer */
+.drawer { max-height: 92vh; overflow-y: auto; }
+.linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
+.inv-opt { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 14px; }
+.inv-opt .field { margin-top: 8px; }
+.inv-help { font-size: 13px; color: var(--ink-2); margin: 10px 0 4px; }
+.inv-sum { font-size: 15px; line-height: 1.6; margin: 0 0 14px; }
+#invDrawer .row a { text-decoration: none; text-align: center; flex: 1; }

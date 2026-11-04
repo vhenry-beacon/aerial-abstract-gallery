@@ -105,13 +105,26 @@
       : "The auto-editor runs every 15 minutes while Vernon's Mac is on (slow motion takes a few minutes more)."}`);
     if (notes) parts.push(`<b>💬 ${notes} note${notes === 1 ? "" : "s"} for Claude.</b> Written notes need Claude: tell Vernon, or ask Claude: “Keri left notes.”`);
     if (updated) parts.push(`<b>✓ ${updated} updated</b>, ready for you to check. <button class="st-chip" data-f="revised" type="button">Show them</button>`);
+    const inv = D.invoice;
+    if (inv) parts.push(`<b>🧾 Invoice ${esc(inv.number || "")} waiting for payment:</b> ${money(inv.total)} from ${esc(inv.org || "")}${inv.po ? ` (PO ${esc(inv.po)})` : ""}${inv.due ? `, due ${new Date(inv.due * 1000).toLocaleDateString()}` : ""}.
+      Paid online, the files unlock by themselves. Got a check? <button class="st-chip" id="invPaid" type="button">✓ Mark paid and release files</button>
+      <a href="${esc(inv.url)}" target="_blank">See invoice ↗</a>`);
     if (w?.error && !stale) parts.push(`<span class="err">The auto-editor hit a problem: ${esc(w.error.slice(0, 160))}</span>`);
     const proj = D.project ? `<a href="/admin/project/?id=${encodeURIComponent(D.project.id)}">${esc(D.project.name)} project page</a>` : "";
     $("banner").innerHTML = parts.length || proj ? `<div class="st-banner">${parts.map((x) => `<div>${x}</div>`).join("")}
       <div class="st-muted st-small">${w ? `Auto-editor last checked ${ago(w.at)}.` : ""} ${proj}</div></div>` : "";
     if (D.project) $("homeLink").href = `/admin/project/?id=${encodeURIComponent(D.project.id)}`, $("homeLink").textContent = "← Project page";
   }
-  $("banner").addEventListener("click", (e) => { const b = e.target.closest("[data-f]"); if (b) { filter = b.dataset.f; setTab("items"); renderItems(); } });
+  $("banner").addEventListener("click", async (e) => {
+    if (e.target.closest("#invPaid")) {
+      if (!confirm(`Mark invoice ${D.invoice.number || ""} (${money(D.invoice.total)}) as paid and release the files to the client now?`)) return;
+      const r = await api(`/api/admin/action?slug=${encodeURIComponent(slug)}`, { method: "POST", body: JSON.stringify({ action: "invoice-paid" }) });
+      if (!r.ok) return toast(r.body.error || "Couldn't mark it paid");
+      toast("Marked paid. The client's files are unlocked.", 5000);
+      return load();
+    }
+    const b = e.target.closest("[data-f]"); if (b) { filter = b.dataset.f; setTab("items"); renderItems(); }
+  });
 
   function renderPublish() {
     renderBanner();

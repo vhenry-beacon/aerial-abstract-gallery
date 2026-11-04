@@ -2,6 +2,7 @@
   const slug = decodeURIComponent(location.pathname.split("/")[2] || "");
   const $ = (id) => document.getElementById(id);
   const money = (c) => "$" + (c / 100).toLocaleString("en-US", { minimumFractionDigits: c % 100 ? 2 : 0 });
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
   let data = null;
   let tab = "all";
   let lbList = [];
@@ -235,10 +236,12 @@
     else if (cartCount) sum = q.total ? `<b>${money(q.total)}</b><br>${cartCount} new item${cartCount > 1 ? "s" : ""}${gifts}`
       : `<b>${cartCount} free item${cartCount > 1 ? "s" : ""}</b><br>${q.cart.length ? "included in your package" : ""}${q.cart.length && q.comp.length ? " · " : ""}${q.comp.length ? "complimentary from Keri" : ""}`;
     else sum = `<b>All set</b><br>Your files are under My files`;
+    const inv = data.invoice;
+    if (inv) sum = `<b>Invoice ${esc(inv.number || "")} · ${money(inv.total)}</b><br>Waiting for payment${inv.due ? `, due ${dueDate(inv.due)}` : ""}`;
     $("barSum").innerHTML = sum;
     const btn = $("checkoutBtn");
-    btn.disabled = st.packagePaid && !cartCount;
-    btn.textContent = st.packagePaid && cartCount && !q.total ? "Add to my files" : "Review & check out";
+    btn.disabled = !inv && st.packagePaid && !cartCount;
+    btn.textContent = inv ? "View invoice" : st.packagePaid && cartCount && !q.total ? "Add to my files" : "Review & check out";
   }
 
   // Add-ons: the highlight reels Keri approved and priced, grouped (Website & YouTube, Social media)
@@ -400,13 +403,14 @@
 
   // ---------- checkout drawer ----------
   function openDrawer(el) { $("scrim").classList.add("open"); el.classList.add("open"); }
-  function closeDrawers() { $("scrim").classList.remove("open"); $("drawer").classList.remove("open"); $("how").classList.remove("open"); }
+  function closeDrawers() { $("scrim").classList.remove("open"); for (const d of ["drawer", "how", "invDrawer"]) $(d).classList.remove("open"); }
   $("scrim").addEventListener("click", closeDrawers);
   $("drawerClose").addEventListener("click", closeDrawers);
   $("howBtn").addEventListener("click", () => openDrawer($("how")));
   $("howClose").addEventListener("click", closeDrawers);
 
   $("checkoutBtn").addEventListener("click", () => {
+    if (data.invoice) return openInvoice();
     const q = data.quote, c = data.client;
     $("lines").innerHTML = q.lines.map((l) => `<tr><td>${l.name}${l.qty > 1 ? ` × ${l.qty}` : ""}</td><td>${money(l.unit * l.qty)}</td></tr>`).join("")
       + (q.freeCount ? `<tr><td>${q.freeCount} included pick${q.freeCount > 1 ? "s" : ""}</td><td>Included</td></tr>` : "")
@@ -421,7 +425,40 @@
     $("payBtn").textContent = q.total ? `Pay ${money(q.total)}` : "Add to my files";
     $("email").classList.toggle("hidden", !q.total);
     $("checkoutErr").textContent = data.paymentsEnabled || !q.total ? "" : "Online payment is being set up. You can still review your order.";
+    $("invOpt").classList.toggle("hidden", !(q.total && data.paymentsEnabled));
+    $("invForm").classList.add("hidden"); $("invShow").classList.remove("hidden"); $("invErr").textContent = "";
+    if (!$("invEmail").value && $("email").value) $("invEmail").value = $("email").value;
     openDrawer($("drawer"));
+  });
+
+  // ---------- invoices: get one to approve, pay it later (or Keri marks a check as paid) ----------
+  const dueDate = (ts) => new Date(ts * 1000).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  $("invShow").addEventListener("click", () => { $("invShow").classList.add("hidden"); $("invForm").classList.remove("hidden"); $("invOrg").focus(); });
+  $("invMake").addEventListener("click", async () => {
+    const btn = $("invMake");
+    btn.disabled = true; btn.textContent = "Making your invoice…"; $("invErr").textContent = "";
+    const r = await api("/api/invoice", { method: "POST", body: JSON.stringify({ slug, org: $("invOrg").value, email: $("invEmail").value, po: $("invPo").value }) });
+    btn.disabled = false; btn.textContent = "Create invoice";
+    if (!r.ok) { $("invErr").textContent = r.body.error || "Couldn't make the invoice. Please try again."; return; }
+    data = r.body; render(); closeDrawers(); openInvoice();
+  });
+  function openInvoice() {
+    const inv = data.invoice, c = data.client;
+    $("invBody").innerHTML = `<p class="inv-sum">Invoice <b>${esc(inv.number || "")}</b> for <b>${esc(inv.org || "")}</b><br>
+      Total <b>${money(inv.total)}</b>${inv.due ? `, due ${dueDate(inv.due)}` : ""}${inv.po ? ` · PO ${esc(inv.po)}` : ""}<br>
+      <span style="color:var(--ink-3);font-size:13px">We also emailed it to ${esc(inv.email || "")}. Anyone with the invoice can pay it online with its <i>Pay online</i> link, by card or bank transfer.
+      To pay by check, contact ${esc(c.provider?.person || "us")}. Your full-quality files unlock here as soon as it's paid.</span></p>`;
+    $("invPdf").href = inv.pdf || inv.url; $("invPay").href = inv.url;
+    $("invDrawerErr").textContent = "";
+    openDrawer($("invDrawer"));
+  }
+  $("invClose").addEventListener("click", closeDrawers);
+  $("invCancel").addEventListener("click", async () => {
+    if (!confirm("Cancel this invoice? It can no longer be paid, and you can change your picks and get a new one.")) return;
+    const r = await api("/api/invoice-cancel", { method: "POST", body: JSON.stringify({ slug }) });
+    if (!r.ok) { $("invDrawerErr").textContent = r.body.error || "Couldn't cancel the invoice. Please try again."; return; }
+    data = r.body; render(); closeDrawers();
+    toast(data.invoice ? "That invoice couldn't be cancelled." : "Invoice cancelled. Your picks are unlocked.");
   });
 
   $("payBtn").addEventListener("click", async () => {
